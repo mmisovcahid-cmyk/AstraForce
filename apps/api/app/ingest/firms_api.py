@@ -13,8 +13,11 @@ from app.ingest.load import delete_nrt, is_done, load_rows, log_ingest
 from app.ingest.parse import ParseStats, iter_rows
 from app.ingest.sources import API_BASE, Country, Source, Window, plan_windows
 
-# Limit 5000 işlem / 10 dk; istekler arasında kısa bekleme yeterli.
+# Limit 5000 işlem / 10 dk; büyük kutular (ABD) istek başına birden çok işlem sayılır.
 REQUEST_PAUSE_S = 0.25
+# Limit aşılınca: 2 dk bekle, en fazla 8 kez (toplam 16 dk > 10 dk'lık pencere)
+LIMIT_WAIT_S = 120
+LIMIT_RETRIES = 8
 
 
 class FirmsApiError(RuntimeError):
@@ -39,12 +42,23 @@ def fetch_area_csv(
 ) -> str:
     area = ",".join(f"{v:g}" for v in bbox)
     url = f"{API_BASE}/area/csv/{key}/{api_source}/{area}/{window.days}/{window.start.isoformat()}"
-    res = get_with_retry(client, url)
-    text = res.text
-    if res.status_code != 200 or not text.startswith("latitude"):
-        # Hata mesajında anahtar geçmesin.
-        raise FirmsApiError(f"{api_source} {window.start}: {text[:120].replace(key, '<KEY>')!r}")
-    return text
+    for attempt in range(LIMIT_RETRIES + 1):
+        res = get_with_retry(client, url)
+        text = res.text
+        if res.status_code == 200 and text.startswith("latitude"):
+            return text
+        # 10 dakikalık işlem limiti doldu: pencere boşalana kadar bekle, aynı isteği tekrarla
+        if "transaction limit" in text.lower() and attempt < LIMIT_RETRIES:
+            print(
+                f"  FIRMS işlem limiti doldu; {LIMIT_WAIT_S // 60} dk bekleniyor"
+                f" ({attempt + 1}/{LIMIT_RETRIES})…",
+                flush=True,
+            )
+            time.sleep(LIMIT_WAIT_S)
+            continue
+        break
+    # Hata mesajında anahtar geçmesin.
+    raise FirmsApiError(f"{api_source} {window.start}: {text[:120].replace(key, '<KEY>')!r}")
 
 
 def ingest_api(

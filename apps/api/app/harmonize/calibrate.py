@@ -39,13 +39,28 @@ def load_country_daily(conn: psycopg.Connection, country: str) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["day", "source", "n_det", "n_evt", "frp", "nrt"])
 
 
-def load_coverage(conn: psycopg.Connection) -> pd.DataFrame:
-    """Bir uydunun o gün veri verdiği günler: tüm ülkelerde en az bir tespit (temizlik öncesi).
+def load_coverage(conn: psycopg.Connection, country: str) -> pd.DataFrame:
+    """Bir uydunun o ülke için o gün "veri verdiği" günler. İki koşul birlikte:
 
-    Yangın olmayan gün ile uydu kesintisini ayırmak için kullanılır; ABD gibi büyük
-    bölgeler neredeyse her gün tespit içerdiği için güvenilir bir göstergedir.
+    1. Uydu o gün herhangi bir ülkede en az bir tespit üretmiş (yangın olmayan günü uydu
+       kesintisinden ayırır; ABD gibi büyük bölgeler neredeyse her gün tespit içerir).
+    2. O kaynağın bu ülke için o günü kapsayan başarılı bir yüklemesi var (ingest_log).
+       Böylece bir uydu yalnızca bazı ülkelere yüklüyse (ör. NOAA-21 kısmen), yüklenmemiş
+       ülkelerde "0 yangın" sayılıp VIIRS ortalamasını aşağı çekmez.
     """
-    rows = conn.execute("SELECT source, acq_date FROM fire_detection GROUP BY 1, 2").fetchall()
+    rows = conn.execute(
+        """
+        WITH loaded AS (
+            SELECT DISTINCT source, g::date AS day
+            FROM ingest_log, generate_series(period_start, period_end, interval '1 day') g
+            WHERE country = %s AND status = 'ok' AND source IS NOT NULL
+              AND period_start IS NOT NULL
+        ),
+        seen AS (SELECT source, acq_date AS day FROM fire_detection GROUP BY 1, 2)
+        SELECT s.source, s.day FROM seen s JOIN loaded l USING (source, day)
+        """,
+        (country,),
+    ).fetchall()
     return pd.DataFrame(rows, columns=["source", "day"])
 
 

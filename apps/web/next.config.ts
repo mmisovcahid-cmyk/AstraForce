@@ -5,11 +5,20 @@ import type { NextConfig } from "next";
 // Monorepo kökündeki ortak .env dosyasını yükle (NEXT_PUBLIC_* değişkenleri).
 loadEnvConfig(path.resolve(__dirname, "../.."));
 
+// Üretimde (Render) tarayıcı API'yi aynı alan adından çağırır: /api/* → API'nin iç ağ adresi.
+// Böylece API'nin genel adresine ve CORS'a gerek kalmaz. Derleme sırasında okunur.
+const apiInternalUrl = process.env.API_INTERNAL_URL;
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Üretim Docker imajı için: yalnızca gereken dosyalarla tek başına çalışan sunucu
   output: "standalone",
   outputFileTracingRoot: path.resolve(__dirname, "../.."),
+  async rewrites() {
+    return apiInternalUrl
+      ? [{ source: "/api/:path*", destination: `${apiInternalUrl.replace(/\/$/, "")}/:path*` }]
+      : [];
+  },
 };
 
 export default nextConfig;

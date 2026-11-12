@@ -9,7 +9,6 @@ export const REGIONS = [
   { id: "AR", bbox: [-73.6, -55.1, -53.6, -21.8] },
   { id: "GR", bbox: [19.3, 34.7, 29.7, 41.8] },
   { id: "PT", bbox: [-9.6, 36.9, -6.1, 42.2] },
-  { id: "ES", bbox: [-9.4, 35.9, 4.4, 43.9] },
 ] as const satisfies readonly { id: string; bbox: Bbox }[];
 
 export type RegionId = (typeof REGIONS)[number]["id"];

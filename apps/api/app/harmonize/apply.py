@@ -121,7 +121,7 @@ def harmonize_cells(cells: pd.DataFrame, factors: pd.DataFrame) -> pd.DataFrame:
 
 
 def run_calibration(conn: psycopg.Connection, country: str) -> dict:
-    coverage = load_coverage(conn)
+    coverage = load_coverage(conn, country)
     t_factor = terra_factor(conn, country)
     series = build_series(load_country_daily(conn, country), coverage, t_factor)
     train = training_rows(series)

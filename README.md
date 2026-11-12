@@ -12,7 +12,7 @@ AstraForce turns 25 years of NASA FIRMS active-fire hotspots from two sensor fam
 |---|---|
 | Harmonize MODIS and VIIRS hotspots | Static-source masking, satellite-aware VIIRS averaging, ST-DBSCAN fire events, and a **calibration selected by leave-one-year-out validation** (see below) |
 | Burning activity calendar, early 2000s → present | GitHub-style daily calendar (2000-11 → today, including near-real-time data) **and** a 25-year **month × year** calendar |
-| Select a region and a date range | 7 preset countries, **draw a polygon on the map**, **search a place name** or **enter lat/lon + radius**, or **upload GeoJSON / KML**; free date range |
+| Select a region and a date range | 6 preset countries, **draw a polygon on the map**, **search a place name** or **enter lat/lon + radius**, or **upload GeoJSON / KML**; free date range |
 | Compare current activity with the historical median | "Current situation" card: month-to-date and last 7 days vs. the **2001–2025 median**, plus anomaly classes; per-month anomalies in the matrix |
 | Which months / years had the most fire? | Month × year matrix (values or anomaly view), yearly ranking, Theil–Sen trend with Mann–Kendall test |
 | Accessible color ramps | Monotonic-lightness fire ramp, a **colorblind-safe (cividis)** option, and a diverging blue–red ramp for anomalies; all with numeric legends |
@@ -24,7 +24,7 @@ Three metrics are available. **Hotspots** (harmonized hotspot count, MODIS-equiv
 
 ## Harmonization method
 
-1. **Data.** We use NASA FIRMS yearly country archives (standard processing) for 2000 → last year, and the FIRMS area API (SP, then NRT) for the current year. Sources are MODIS C6.1 (Terra + Aqua), VIIRS S-NPP, NOAA-20 and NOAA-21 (API only, since 2023). The database covers Azerbaijan, Türkiye, the United States, Argentina, Greece, Portugal and Spain, about 24 M detections.
+1. **Data.** We use NASA FIRMS yearly country archives (standard processing) for 2000 → last year, and the FIRMS area API (SP, then NRT) for the current year. Sources are MODIS C6.1 (Terra + Aqua), VIIRS S-NPP, NOAA-20 and NOAA-21 (API only, since 2023). The database covers Azerbaijan, Türkiye, the United States, Argentina, Greece and Portugal, about 24 M detections. NOAA-21 history is loaded for Greece and Portugal; for the other countries the daily job adds it from the current year on, and coverage is tracked per country, so missing NOAA-21 history never biases the VIIRS mean.
 2. **Cleaning.** We keep detections with confidence ≥ nominal. We remove static thermal sources (gas flares, industry): cells NASA flags `type=2`, plus cells that are hot on more than 100 days across 5 or more years. The mask is dilated by one H3 ring. This matters because in Türkiye about 25 % of VIIRS hotspots are static sources, versus about 3 % for MODIS.
 3. **Satellites.** The VIIRS value of a day is the *mean* of the VIIRS satellites that delivered data that day; summing them would create a false jump in 2018. MODIS before Aqua (2000-11 → 2002-07) is scaled by the regional (Terra+Aqua)/Terra ratio.
 4. **Fire events.** ST-DBSCAN (1.5 km, 1 day) merges multi-pixel detections into fire events.
@@ -39,6 +39,8 @@ Three metrics are available. **Hotspots** (harmonized hotspot count, MODIS-equiv
 | United States | Random Forest | **2.1 %** | 0.95 | 0.99 | 2.0 days | 250 % |
 | Türkiye | Monthly ratio | **4.4 %** | 0.89 | 0.97 | 3.7 days | 217 % |
 | Azerbaijan | Random Forest | **7.9 %** | 0.85 | 0.95 | 5.7 days | 281 % |
+| Portugal | Random Forest | **6.6 %** | 0.89 | 0.96 | 3.2 days | 171 % |
+| Greece | Monthly ratio | **8.5 %** | 0.83 | 0.96 | 3.4 days | 241 % |
 
 The season timing shift is the mean difference of the dates when 10 / 50 / 90 % of the yearly fire activity is reached. Known events reproduce. Manavgat 2021: a 30 km radius ranks 2021 first of 25 years and puts the season start on 28 July. United States 2020: the top FRP year, with the peak week starting 5 September.
 
@@ -64,10 +66,10 @@ Run `pnpm test` (pytest and vitest) and `pnpm lint`. `pnpm update:daily` refresh
 |---|---|---|
 | `astraforce-db` | Private service + 20 GB disk | PostGIS 3.6 + **H3**. Render's managed Postgres has no H3 extension, so the database runs from `db/Dockerfile`. |
 | `astraforce-api` | Web service | FastAPI. Migrations run on start. |
-| `astraforce-web` | Web service | Next.js. It is built with the API's public URL (`API_HOST` build arg). |
+| `astraforce-web` | Web service | Next.js. The browser only talks to this service; it forwards `/api/*` to the API over Render's private network, so no CORS setup is needed. |
 | `astraforce-update` | Cron job, 05:30 UTC daily | `python -m app.update`: newest FIRMS data plus re-harmonization. |
 
-After the first deploy, set the secret environment variables in the Render dashboard: **`FIRMS_MAP_KEY`** on api and update, and **`CORS_ORIGINS`** on the API (the web service URL, for example `https://astraforce-web.onrender.com`).
+All services are in the same region (Frankfurt), which the private network requires. The only secret to enter is **`FIRMS_MAP_KEY`**, on api and update.
 
 Load the 25-year data once, by either route:
 
@@ -96,7 +98,7 @@ Active fire data: **NASA FIRMS** (MODIS Collection 6.1 MCD14; VIIRS 375 m VNP14I
 
 ## Limitations
 
-- Areas must fall inside the loaded countries (AZ, TR, US, AR, GR, PT, ES). Any other country can be added with one `ingest` + `harmonize` command, after adding it to `COUNTRIES` in `apps/api/app/ingest/sources.py` and `REGIONS` in `apps/web/src/lib/regions.ts`.
+- Areas must fall inside the loaded countries (AZ, TR, US, AR, GR, PT). Any other country can be added with one `ingest` + `harmonize` command, after adding it to `COUNTRIES` in `apps/api/app/ingest/sources.py` and `REGIONS` in `apps/web/src/lib/regions.ts`.
 - The land cover overlay is visual only; per-fire land cover statistics are not computed.
 - Near-real-time days are provisional. They are marked on the calendar and replaced by standard-processing data when NASA publishes it.
 - Calibration is per country. Small areas inherit their country's daily factors.

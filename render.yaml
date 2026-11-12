@@ -1,18 +1,24 @@
 # Render Blueprint — New → Blueprint ile bu depoyu seçin.
-# Render'ın yönetilen PostgreSQL'inde H3 eklentisi olmadığı için veritabanı, kalıcı diski olan
-# bir Docker "private service" olarak çalışır (db/Dockerfile: PostGIS + H3).
+#
+# - Render'ın yönetilen PostgreSQL'inde H3 eklentisi yok → veritabanı kalıcı diskli bir Docker
+#   "private service" (db/Dockerfile: PostGIS + H3).
+# - Tarayıcı yalnızca web servisini görür; web, /api/* isteklerini Render iç ağı üzerinden
+#   API'ye aktarır (CORS ve API'nin genel adresi gerekmez).
+# - İç ağ için tüm servisler AYNI bölgede olmalı.
 #
 # İlk kurulumda veriyi doldurmanın iki yolu (README → Deploy on Render):
-#   (a) Hızlı: yerelde `pnpm db:dump`, dosyayı bir URL'ye yükleyin, astraforce-db'de DUMP_URL verin.
-#   (b) Yavaş (~1,5 sa): astraforce-update cron işini bir kez elle "Trigger Run" ile
-#       `python -m app.update --bootstrap` komutuyla çalıştırın.
+#   (a) Hızlı: yerelde `pnpm db:dump`, dosyayı bir URL'ye yükleyin, astraforce-db'de DUMP_URL verin
+#       (veritabanının İLK açılışından önce).
+#   (b) Yavaş (~1,5 sa): astraforce-update cron işinde bir kez
+#       `python -m app.update --bootstrap` çalıştırın.
 services:
   - type: pserv
     name: astraforce-db
     runtime: docker
+    region: frankfurt
     dockerfilePath: ./db/Dockerfile
     dockerContext: ./db
-    plan: standard            # 2 GB RAM; ABD + Arjantin sorguları için önerilen
+    plan: standard            # 2 GB RAM
     disk:
       name: pgdata
       mountPath: /var/lib/postgresql/data
@@ -32,6 +38,7 @@ services:
   - type: web
     name: astraforce-api
     runtime: docker
+    region: frankfurt
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: .
     plan: starter
@@ -43,23 +50,23 @@ services:
         fromService: { type: pserv, name: astraforce-db, envVarKey: POSTGRES_PASSWORD }
       - key: FIRMS_MAP_KEY
         sync: false
-      - key: CORS_ORIGINS
-        sync: false            # ör. https://astraforce-web.onrender.com
 
   - type: web
     name: astraforce-web
     runtime: docker
+    region: frankfurt
     dockerfilePath: ./apps/web/Dockerfile
     dockerContext: .
     plan: starter
     envVars:
-      # Web imajı derlenirken tarayıcının çağıracağı API adresi (Docker build argümanı)
-      - key: API_HOST
-        fromService: { type: web, name: astraforce-api, property: host }
+      # Derleme argümanı: /api/* → http://<bu adres> (Render iç ağı)
+      - key: API_HOSTPORT
+        fromService: { type: web, name: astraforce-api, property: hostport }
 
   - type: cron
     name: astraforce-update
     runtime: docker
+    region: frankfurt
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: .
     plan: standard             # ABD harmonizasyonu ~2–3 GB RAM ister; gerekirse "pro"

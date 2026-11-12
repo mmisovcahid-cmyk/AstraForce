@@ -73,14 +73,6 @@ COUNTRIES: dict[str, Country] = {
                 (-17.3, 32.6, -16.2, 33.2),  # Madeira
             ),
         ),
-        Country(
-            "ES",
-            "Spain",
-            (
-                (-9.4, 35.9, 4.4, 43.9),  # anakara + Balear
-                (-18.2, 27.6, -13.4, 29.5),  # Kanarya
-            ),
-        ),
     )
 }
 
