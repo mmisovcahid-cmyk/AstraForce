@@ -1,0 +1,13 @@
+{
+  "name": "api",
+  "private": true,
+  "scripts": {
+    "dev": "uv run uvicorn app.main:app --port 8000 --timeout-graceful-shutdown 2",
+    "test": "uv run pytest",
+    "lint": "uv run ruff check .",
+    "migrate": "uv run python -m app.migrate",
+    "ingest": "uv run python -m app.ingest",
+    "harmonize": "uv run python -m app.harmonize",
+    "dev:reload": "uv run uvicorn app.main:app --reload --port 8000 --timeout-graceful-shutdown 2"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "astraforce",
+  "private": true,
+  "packageManager": "pnpm@10.4.1",
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "setup:all": "node scripts/setup.mjs",
+    "dev": "concurrently -k -n web,api -c cyan,magenta \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
+    "build": "pnpm --filter web build",
+    "test": "pnpm -r --workspace-concurrency=1 test",
+    "lint": "pnpm -r lint",
+    "ingest": "pnpm --silent --filter api ingest",
+    "db:up": "docker compose up -d --build --wait",
+    "db:migrate": "pnpm --filter api migrate",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d --build --wait && pnpm db:migrate",
+    "db:logs": "docker compose logs -f db",
+    "db:psql": "docker compose exec db psql -U astra -d astraforce",
+    "harmonize": "pnpm --silent --filter api harmonize",
+    "db:dump": "node scripts/dump-db.mjs",
+    "prod:build": "docker compose -f docker-compose.prod.yml build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "sharp",
+      "unrs-resolver",
+      "@tailwindcss/oxide"
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  --color-fire-50: #fff7d6;
+  --color-fire-200: #fdd36b;
+  --color-fire-400: #f78c2a;
+  --color-fire-600: #d9461b;
+  --color-fire-800: #8f1d12;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: #0b1020;
+  color: #e5e7eb;
+}

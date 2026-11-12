@@ -1,0 +1,61 @@
+# Üretim: tek sunucuda veritabanı + API + web + HTTPS (Caddy, Let's Encrypt).
+#   DOMAIN=astraforce.example.org POSTGRES_PASSWORD=... docker compose -f docker-compose.prod.yml up -d --build
+# Veri: yerelde `pnpm db:dump` ile alınan yedeği sunucuda `scripts/restore-db.sh` ile yükleyin
+# (25 yıllık veriyi sunucuda yeniden indirmekten çok daha hızlı).
+name: astraforce-prod
+
+services:
+  db:
+    build: ./db
+    image: astraforce-postgis:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-astra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli}
+      POSTGRES_DB: ${POSTGRES_DB:-astraforce}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./data/dumps:/dumps:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-astra}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-astraforce}
+      FIRMS_MAP_KEY: ${FIRMS_MAP_KEY:-}
+      CORS_ORIGINS: https://${DOMAIN:-localhost}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on: [api]
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on: [web, api]
+
+volumes:
+  pgdata:
+  caddy_data:

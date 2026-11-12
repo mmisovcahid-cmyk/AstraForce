@@ -1,0 +1,42 @@
+[project]
+name = "astraforce-api"
+version = "0.1.0"
+description = "AstraForce: MODIS/VIIRS yangın verisi harmonizasyon API'si"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic-settings>=2.6",
+    "psycopg[binary,pool]>=3.2",
+    "httpx>=0.28",
+    "pandas>=3.1.1",
+    "numpy>=2.5.4",
+    "scikit-learn>=1.9.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["db: needs the running PostGIS container (skipped when unreachable)"]
+# Starlette httpx2'ye geçişi öneriyor; TestClient httpx ile hâlâ çalışıyor.
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test dosyalarında gerçek FIRMS CSV satırları birebir duruyor.
+"tests/*" = ["E501"]

@@ -1,0 +1,27 @@
+node_modules/
+.pnpm-store/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+apps/web/public/maplibre/
+
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+.env
+.env.local
+data/
+
+.DS_Store
+Thumbs.db
+
+# Kişisel / yerel dosyalar
+Front test/
+.claude/settings.local.json
+plan.pdf
