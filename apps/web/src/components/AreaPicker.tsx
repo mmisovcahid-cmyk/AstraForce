@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createRoi, type RoiInfo } from "@/lib/api";
 import type { MessageKey } from "@/lib/i18n";
 import { type AreaCode, isRoi, REGIONS } from "@/lib/regions";
+import { PlaceSearch } from "./PlaceSearch";
 
 type T = (k: MessageKey) => string;
 type Tab = "coords" | "geojson";
@@ -28,6 +29,7 @@ export function AreaPicker({
   const [lat, setLat] = useState("36.78");
   const [lon, setLon] = useState("31.44");
   const [radius, setRadius] = useState("30");
+  const [placeName, setPlaceName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,7 +56,10 @@ export function AreaPicker({
       setError("lat / lon / radius?");
       return;
     }
-    void submit({ circle: { lat: la, lon: lo, radius_km: r } });
+    void submit({
+      circle: { lat: la, lon: lo, radius_km: r },
+      name: placeName ? `${placeName.split(",")[0]} · ${r} km` : undefined,
+    });
   };
 
   const onFile = async (file: File | undefined) => {
@@ -64,10 +69,18 @@ export function AreaPicker({
       return;
     }
     try {
-      const json = JSON.parse(await file.text());
-      void submit({ geojson: json, name: file.name.replace(/\.(geo)?json$/i, "") });
+      const text = await file.text();
+      const name = file.name.replace(/\.(geo)?json$|\.kml$/i, "");
+      if (/\.kml$/i.test(file.name) || text.trimStart().startsWith("<")) {
+        // KML → GeoJSON tarayıcıda (togeojson); sunucuda yalnızca çokgenler kullanılır
+        const { kml } = await import("@tmcw/togeojson");
+        const doc = new DOMParser().parseFromString(text, "text/xml");
+        void submit({ geojson: kml(doc), name });
+      } else {
+        void submit({ geojson: JSON.parse(text), name });
+      }
     } catch {
-      setError("GeoJSON?");
+      setError("GeoJSON / KML?");
     }
   };
 
@@ -78,17 +91,23 @@ export function AreaPicker({
 
   return (
     <div className="relative flex flex-wrap items-center gap-1" role="group" aria-label={t("area")}>
-      {REGIONS.map((r) => (
-        <button
-          key={r.id}
-          type="button"
-          onClick={() => onChange(r.id)}
-          aria-pressed={area === r.id}
-          className={btn(area === r.id)}
-        >
-          {t(`region.${r.id}`)}
-        </button>
-      ))}
+      <select
+        value={isRoi(area) ? "" : area}
+        onChange={(e) => e.target.value && onChange(e.target.value as AreaCode)}
+        aria-label={t("country")}
+        className={btn(!isRoi(area))}
+      >
+        {isRoi(area) && (
+          <option value="" className="bg-gray-900">
+            {t("country")}…
+          </option>
+        )}
+        {REGIONS.map((r) => (
+          <option key={r.id} value={r.id} className="bg-gray-900">
+            {t(`region.${r.id}`)}
+          </option>
+        ))}
+      </select>
       {isRoi(area) && (
         <span className={btn(true)} title={roi ? `${roi.area_km2.toLocaleString()} km²` : undefined}>
           {roi?.name || t("roiLabel")}
@@ -115,7 +134,7 @@ export function AreaPicker({
                 aria-pressed={tab === k}
                 className={`flex-1 rounded px-2 py-1 ${tab === k ? "bg-white/20" : "bg-white/5 text-gray-400"}`}
               >
-                {t(k === "coords" ? "coordinates" : "uploadGeojson")}
+                {t(k === "coords" ? "coordinates" : "uploadFile")}
               </button>
             ))}
             <a
@@ -127,6 +146,17 @@ export function AreaPicker({
           </div>
 
           {tab === "coords" ? (
+            <div className="space-y-2">
+              {/* Arama kendi formu: koordinat formunun içine konamaz (iç içe form geçersiz) */}
+              <PlaceSearch
+                placeholder={t("searchPlace")}
+                noResult={t("searchNoResult")}
+                onSelect={(p) => {
+                  setLat(p.lat.toFixed(4));
+                  setLon(p.lon.toFixed(4));
+                  setPlaceName(p.name);
+                }}
+              />
             <form onSubmit={onCoords} className="space-y-2">
               <div className="grid grid-cols-3 gap-2">
                 {(
@@ -155,12 +185,13 @@ export function AreaPicker({
                 {busy ? "…" : t("analyze")}
               </button>
             </form>
+            </div>
           ) : (
             <label className="block cursor-pointer rounded border border-dashed border-white/30 p-4 text-center text-gray-300 hover:bg-white/5">
-              {busy ? "…" : t("uploadGeojson")} (.geojson, .json)
+              {busy ? "…" : t("uploadFile")} (.geojson, .json, .kml)
               <input
                 type="file"
-                accept=".geojson,.json,application/geo+json,application/json"
+                accept=".geojson,.json,.kml,application/geo+json,application/json,application/vnd.google-earth.kml+xml"
                 className="hidden"
                 onChange={(e) => void onFile(e.target.files?.[0])}
               />

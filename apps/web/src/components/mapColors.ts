@@ -4,4 +4,5 @@ export const SOURCE_COLORS: Record<string, string> = {
   MODIS: "#f97316",
   VIIRS_SNPP: "#2563eb",
   VIIRS_NOAA20: "#a855f7",
+  VIIRS_NOAA21: "#14b8a6",
 };

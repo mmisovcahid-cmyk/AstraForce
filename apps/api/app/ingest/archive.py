@@ -20,6 +20,8 @@ def ingest_archive(
     force: bool = False,
 ) -> None:
     for source in sources:
+        if source.archive_dir is None:  # yalnızca API'den gelen kaynak (NOAA-21)
+            continue
         first = max(years[0], source.archive_first_year)
         for year in range(first, years[1] + 1):
             key = f"archive:{source.code}:{country.iso2}:{year}"

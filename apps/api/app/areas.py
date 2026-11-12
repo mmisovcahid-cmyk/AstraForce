@@ -104,13 +104,14 @@ def raw_counts(conn: psycopg.Connection, area: Area, first: date, last: date) ->
         return out
     rows = conn.execute(
         """
-        SELECT day, modis_det, snpp_det, noaa20_det FROM roi_daily
+        SELECT day, modis_det, snpp_det, noaa20_det, noaa21_det FROM roi_daily
         WHERE roi_id = %s AND day BETWEEN %s AND %s
         """,
         (area.key, first, last),
     ).fetchall()
     return {
-        d.isoformat(): {MODIS: m, VIIRS_SOURCES[0]: s, VIIRS_SOURCES[1]: n} for d, m, s, n in rows
+        d.isoformat(): {MODIS: m, VIIRS_SOURCES[0]: s, VIIRS_SOURCES[1]: n, VIIRS_SOURCES[2]: n21}
+        for d, m, s, n, n21 in rows
     }
 
 
@@ -333,13 +334,14 @@ def _compute(conn: psycopg.Connection, rid: str) -> None:
                 "modis_det",
                 "snpp_det",
                 "noaa20_det",
+                "noaa21_det",
             ]
         ].to_csv(index=False, header=False)
         with (
             conn.cursor() as cur,
             cur.copy(
                 "COPY roi_daily (roi_id, day, hotspots, events, frp, provisional, modis_det,"
-                " snpp_det, noaa20_det) FROM STDIN WITH (FORMAT csv)"
+                " snpp_det, noaa20_det, noaa21_det) FROM STDIN WITH (FORMAT csv)"
             ) as copy,
         ):
             copy.write(block)
@@ -365,6 +367,7 @@ def harmonize_roi(raw: pd.DataFrame | None, factors: pd.DataFrame) -> pd.DataFra
         "modis_det",
         "snpp_det",
         "noaa20_det",
+        "noaa21_det",
     ]
     if raw is None or raw.empty:
         return pd.DataFrame(columns=cols)
@@ -397,6 +400,7 @@ def harmonize_roi(raw: pd.DataFrame | None, factors: pd.DataFrame) -> pd.DataFra
     out["modis_det"] = j[f"det_{MODIS}"]
     out["snpp_det"] = j[f"det_{VIIRS_SOURCES[0]}"]
     out["noaa20_det"] = j[f"det_{VIIRS_SOURCES[1]}"]
+    out["noaa21_det"] = j[f"det_{VIIRS_SOURCES[2]}"]
     daily = out.groupby("day", as_index=False).agg(
         hotspots=("hotspots", "sum"),
         events=("events", "sum"),
@@ -405,6 +409,7 @@ def harmonize_roi(raw: pd.DataFrame | None, factors: pd.DataFrame) -> pd.DataFra
         modis_det=("modis_det", "sum"),
         snpp_det=("snpp_det", "sum"),
         noaa20_det=("noaa20_det", "sum"),
+        noaa21_det=("noaa21_det", "sum"),
     )
     daily = daily[(daily["hotspots"] > 0) | (daily["events"] > 0)]
     return daily.round({"hotspots": 4, "events": 4, "frp": 2})[cols]

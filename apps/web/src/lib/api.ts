@@ -109,6 +109,7 @@ export type CalendarDay = {
   modis_det?: number;
   viirs_snpp_det?: number;
   viirs_noaa20_det?: number;
+  viirs_noaa21_det?: number;
 };
 
 export type CalendarData = {

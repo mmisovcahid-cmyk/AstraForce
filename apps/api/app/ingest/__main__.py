@@ -123,6 +123,23 @@ def main(argv: list[str] | None = None) -> int:
                     if args.cmd == "api"
                     else date(today.year, 1, 1)
                 )
+                # Arşivi olmayan kaynaklar (NOAA-21) "all" ile ilk yılından itibaren API'den gelir
+                api_only = [s for s in sources if s.archive_dir is None]
+                if args.cmd == "all" and api_only:
+                    try:
+                        ingest_api(
+                            conn,
+                            client,
+                            settings.firms_map_key,
+                            country,
+                            api_only,
+                            date(min(s.archive_first_year for s in api_only), 1, 1),
+                            date(today.year - 1, 12, 31),
+                            args.force,
+                        )
+                    except FirmsApiError as e:
+                        print(f"Hata (FIRMS API): {e}", file=sys.stderr)
+                        return 1
                 end = date.fromisoformat(args.date_to) if args.cmd == "api" else today
                 try:
                     ingest_api(

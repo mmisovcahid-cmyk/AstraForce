@@ -8,6 +8,7 @@ const NAV = [
   { href: "/", key: "nav.calendar" },
   { href: "/map", key: "nav.map" },
   { href: "/validation", key: "nav.validation" },
+  { href: "/about", key: "nav.about" },
 ] as const;
 
 /** Tüm sayfalarda ortak üst bar: başlık, gezinme, sayfaya özgü kontroller, dil. */

@@ -9,13 +9,17 @@ RUN pnpm install --frozen-lockfile --filter web...
 COPY apps/web apps/web
 # Tarayıcı API'ye aynı alan adı üzerinden ulaşır (Caddy: /api → api:8000)
 ARG NEXT_PUBLIC_API_URL=/api
+# Render: API ayrı bir serviste; API_HOST verilirse https://API_HOST kullanılır
+ARG API_HOST=
 ARG NEXT_PUBLIC_DEFAULT_LOCALE=en
 ARG NEXT_PUBLIC_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
     NEXT_PUBLIC_DEFAULT_LOCALE=$NEXT_PUBLIC_DEFAULT_LOCALE \
     NEXT_PUBLIC_MAP_STYLE_URL=$NEXT_PUBLIC_MAP_STYLE_URL \
     NEXT_TELEMETRY_DISABLED=1
-RUN pnpm --filter web build
+RUN if [ -n "$API_HOST" ]; then export NEXT_PUBLIC_API_URL="https://$API_HOST"; fi \
+    && echo "NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL" \
+    && pnpm --filter web build
 
 FROM node:24-alpine
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0

@@ -93,3 +93,34 @@ def validation(
             for y, md, vd, me, ve, h, hd in years
         ],
     }
+
+
+@router.get("/summary")
+def summary() -> dict:
+    """Tüm ülkeler için seçilen modeller ve yıl-dışı doğrulama ölçüleri (Yöntem sayfası için)."""
+    with get_pool().connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT c.country, c.target, c.method, c.metrics, c.version,
+                   r.metrics->>'mean_abs_annual_bias_pct'
+            FROM calibration_model c
+            LEFT JOIN calibration_model r
+              ON r.country = c.country AND r.target = c.target AND r.method = 'viirs_raw'
+            WHERE c.selected ORDER BY c.country, c.target
+            """
+        ).fetchall()
+        # Tahmini satır sayısı (count(*) 25 milyon satırda yavaş); ANALYZE sonrası doğru
+        n_det = conn.execute(
+            "SELECT reltuples::bigint FROM pg_class WHERE relname = 'fire_detection'"
+        ).fetchone()[0]
+    out: dict[str, dict] = {}
+    for country, target, method, met, version, raw_bias in rows:
+        out.setdefault(country, {"version": version})[target] = {
+            "method": method,
+            "mean_abs_annual_bias_pct": met.get("mean_abs_annual_bias_pct"),
+            "daily_r": met.get("daily_r"),
+            "weekly_r": met.get("weekly_r"),
+            "mean_season_shift_days": met.get("mean_season_shift_days"),
+            "uncalibrated_bias_pct": float(raw_bias) if raw_bias is not None else None,
+        }
+    return {"countries": out, "detections": n_det}

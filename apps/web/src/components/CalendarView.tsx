@@ -487,7 +487,7 @@ function FireCalendar({
             `${t("metric.frp")}: ${formatNumber(d.frp ?? 0, locale)} MW`,
           ];
           if (!isMean) {
-            lines.push(`<span style="color:#9ca3af">MODIS ${d.modis_det ?? 0} · VIIRS SNPP ${d.viirs_snpp_det ?? 0} · NOAA-20 ${d.viirs_noaa20_det ?? 0}</span>`);
+            lines.push(`<span style="color:#9ca3af">MODIS ${d.modis_det ?? 0} · VIIRS SNPP ${d.viirs_snpp_det ?? 0} · NOAA-20 ${d.viirs_noaa20_det ?? 0} · NOAA-21 ${d.viirs_noaa21_det ?? 0}</span>`);
             if (d.provisional) lines.push(`<i>${t("provisional")}</i>`);
             if (!isRoi(area)) lines.push(`<span style="color:#9ca3af">${t("clickForMap")}</span>`);
           }
@@ -514,7 +514,12 @@ function FireCalendar({
     if (!v || data.mode === "mean" || isRoi(area)) return;
     window.location.href = `/map?region=${area}&date=${v[0]}&range=1`;
   };
-  return <EChart option={option} onClick={onClick} className="h-44 w-full" />;
+  // Telefonda 53 hafta sığmaz: en az 720 px genişlik, yatay kaydırma
+  return (
+    <div className="-mx-1 overflow-x-auto px-1">
+      <EChart option={option} onClick={onClick} className="h-44 w-full min-w-[720px]" />
+    </div>
+  );
 }
 
 function Kpis({
@@ -627,7 +632,15 @@ function MatrixChart({
           </span>
         )}
       </div>
-      <EChart option={option} pngName={pngName} pngTitle={t("downloadPng")} className="w-full" style={{ height: 40 + rows * 16 }} />
+      <div className="overflow-x-auto">
+        <EChart
+          option={option}
+          pngName={pngName}
+          pngTitle={t("downloadPng")}
+          className="w-full min-w-[560px]"
+          style={{ height: 40 + rows * 16 }}
+        />
+      </div>
     </div>
   );
 }

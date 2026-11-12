@@ -37,6 +37,7 @@ export function FireMap({
   roiGeometry = null,
   drawing = false,
   onPolygon,
+  landCoverYear = null,
 }: {
   bbox: Bbox;
   detections: Detections | null;
@@ -46,7 +47,10 @@ export function FireMap({
   /** true iken kullanıcı haritada çokgen çizer; bitince onPolygon çağrılır. */
   drawing?: boolean;
   onPolygon?: (geometry: GeoJSON.Polygon) => void;
+  /** NASA GIBS MODIS MCD12Q1 (IGBP) arazi örtüsü katmanı; null = kapalı. */
+  landCoverYear?: number | null;
 }) {
+  const latestLandCover = useRef<number | null>(landCoverYear);
   const drawRef = useRef<TerraDraw | null>(null);
   const onPolygonRef = useRef(onPolygon);
   onPolygonRef.current = onPolygon;
@@ -69,6 +73,7 @@ export function FireMap({
     m.addControl(new maplibregl.ScaleControl(), "bottom-left");
 
     m.on("load", () => {
+      addLandCover(m, latestLandCover.current);
       // H3 r5 yoğunluk katmanı (harmonize HFI), noktaların altında
       m.addSource("cells", { type: "geojson", data: latestCells.current });
       m.addLayer({
@@ -108,6 +113,7 @@ export function FireMap({
             "MODIS", SOURCE_COLORS.MODIS,
             "VIIRS_SNPP", SOURCE_COLORS.VIIRS_SNPP,
             "VIIRS_NOAA20", SOURCE_COLORS.VIIRS_NOAA20,
+            "VIIRS_NOAA21", SOURCE_COLORS.VIIRS_NOAA21,
             "#9ca3af",
           ],
           // FRP (MW) büyüdükçe nokta büyür.
@@ -191,6 +197,12 @@ export function FireMap({
     src?.setData(latestRoi.current);
   }, [roiGeometry]);
 
+  useEffect(() => {
+    latestLandCover.current = landCoverYear;
+    const m = map.current;
+    if (m?.isStyleLoaded()) addLandCover(m, landCoverYear);
+  }, [landCoverYear]);
+
   // Çizim modu (terra-draw): çokgen bitince üst bileşene bildir
   useEffect(() => {
     const m = map.current;
@@ -218,4 +230,24 @@ export function FireMap({
   }, [drawing]);
 
   return <div ref={container} className="h-full w-full" data-testid="fire-map" />;
+}
+
+const GIBS_LAND_COVER =
+  "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual/default/{year}-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png";
+
+/** Arazi örtüsü raster katmanını (yeniden) ekler; yıl değişince kaynak yenilenir. */
+function addLandCover(m: maplibregl.Map, year: number | null) {
+  if (m.getLayer("landcover")) m.removeLayer("landcover");
+  if (m.getSource("landcover")) m.removeSource("landcover");
+  if (year === null) return;
+  m.addSource("landcover", {
+    type: "raster",
+    tiles: [GIBS_LAND_COVER.replace("{year}", String(year))],
+    tileSize: 256,
+    maxzoom: 8,
+    attribution: "Land cover: NASA GIBS / MODIS MCD12Q1",
+  });
+  // Yangın katmanlarının altında kalsın
+  const before = m.getLayer("cells") ? "cells" : undefined;
+  m.addLayer({ id: "landcover", type: "raster", source: "landcover", paint: { "raster-opacity": 0.6 } }, before);
 }

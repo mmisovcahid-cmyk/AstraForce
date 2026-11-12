@@ -14,5 +14,5 @@ COPY db/migrations /srv/db/migrations
 
 ENV PATH="/srv/apps/api/.venv/bin:$PATH"
 EXPOSE 8000
-# Açılışta şemayı güncelle, sonra API'yi başlat
-CMD ["sh", "-c", "python -m app.migrate && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers"]
+# Açılışta şemayı güncelle, sonra API'yi başlat (Render PORT verir; yoksa 8000)
+CMD ["sh", "-c", "python -m app.migrate && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2 --proxy-headers"]

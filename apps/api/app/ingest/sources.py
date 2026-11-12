@@ -16,7 +16,7 @@ API_MAX_DAYS = 5
 class Source:
     code: str  # fire_detection.source değeri
     alias: str  # CLI'da kullanılan kısa ad
-    archive_dir: str  # yıllık ülke dosyalarının klasör/ön ek adı
+    archive_dir: str | None  # yıllık ülke dosyalarının klasör/ön eki (None: yalnızca API)
     archive_first_year: int
     api_sp: str
     api_nrt: str
@@ -30,6 +30,8 @@ SOURCES: dict[str, Source] = {
         Source(
             "VIIRS_NOAA20", "noaa20", "viirs-jpss1", 2018, "VIIRS_NOAA20_SP", "VIIRS_NOAA20_NRT"
         ),
+        # NOAA-21: SP 2023-03'ten, NRT 2024-01'den. Yıllık ülke dosyası yok → yalnızca API.
+        Source("VIIRS_NOAA21", "noaa21", None, 2023, "VIIRS_NOAA21_SP", "VIIRS_NOAA21_NRT"),
     )
 }
 
@@ -60,6 +62,25 @@ COUNTRIES: dict[str, Country] = {
         ),
         # Arjantin (Tierra del Fuego dahil); Falkland Adaları ayrı ülke (FK), kırpmada düşer
         Country("AR", "Argentina", ((-73.6, -55.1, -53.5, -21.7),)),
+        # Akdeniz yangın rejimi (Türkiye ile karşılaştırma için)
+        Country("GR", "Greece", ((19.3, 34.7, 29.7, 41.8),)),
+        Country(
+            "PT",
+            "Portugal",
+            (
+                (-9.6, 36.9, -6.1, 42.2),  # anakara
+                (-31.4, 36.9, -24.9, 39.8),  # Azorlar
+                (-17.3, 32.6, -16.2, 33.2),  # Madeira
+            ),
+        ),
+        Country(
+            "ES",
+            "Spain",
+            (
+                (-9.4, 35.9, 4.4, 43.9),  # anakara + Balear
+                (-18.2, 27.6, -13.4, 29.5),  # Kanarya
+            ),
+        ),
     )
 }
 

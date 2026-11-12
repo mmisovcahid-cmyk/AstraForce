@@ -8,6 +8,8 @@
     "migrate": "uv run python -m app.migrate",
     "ingest": "uv run python -m app.ingest",
     "harmonize": "uv run python -m app.harmonize",
-    "dev:reload": "uv run uvicorn app.main:app --reload --port 8000 --timeout-graceful-shutdown 2"
+    "dev:reload": "uv run uvicorn app.main:app --reload --port 8000 --timeout-graceful-shutdown 2",
+    "update": "uv run python -m app.update",
+    "optimize": "uv run python -m app.optimize"
   }
 }

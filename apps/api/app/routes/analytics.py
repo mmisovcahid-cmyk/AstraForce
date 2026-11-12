@@ -154,6 +154,7 @@ def calendar(
                 "modis_det": r.get(MODIS, 0),
                 "viirs_snpp_det": r.get(VIIRS_SOURCES[0], 0),
                 "viirs_noaa20_det": r.get(VIIRS_SOURCES[1], 0),
+                "viirs_noaa21_det": r.get(VIIRS_SOURCES[2], 0),
             }
         )
     in_year = {

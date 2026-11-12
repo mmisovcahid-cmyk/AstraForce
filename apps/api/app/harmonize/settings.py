@@ -16,7 +16,7 @@ EVENT_EPS_DAYS = 1
 
 # Kaynaklar
 MODIS = "MODIS"
-VIIRS_SOURCES = ("VIIRS_SNPP", "VIIRS_NOAA20")
+VIIRS_SOURCES = ("VIIRS_SNPP", "VIIRS_NOAA20", "VIIRS_NOAA21")
 ALL_SOURCES = (MODIS, *VIIRS_SOURCES)
 AQUA_FIRST_DAY = date(2002, 7, 4)  # öncesinde MODIS = yalnızca Terra
 TERRA_FACTOR_YEARS = (2003, 2007)  # Terra+Aqua / Terra oranının hesaplandığı yıllar

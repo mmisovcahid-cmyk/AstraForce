@@ -134,6 +134,20 @@ const az = {
   "ramp.cividis": "Rəng korluğu üçün",
   "target.det": "İsti nöqtə sayı",
   "target.evt": "Hadisə-gün",
+  "nav.about": "Metod",
+  "region.GR": "Yunanıstan",
+  "region.PT": "Portuqaliya",
+  "region.ES": "İspaniya",
+  "source.VIIRS_NOAA21": "VIIRS NOAA-21 (375 m)",
+  countriesN: "{n} ölkə",
+  hotspotsN: "{n} isti nöqtə",
+  country: "Ölkə",
+  searchPlace: "Yer axtar…",
+  searchNoResult: "Tapılmadı",
+  uploadFile: "GeoJSON / KML yüklə",
+  landCover: "Torpaq örtüyü (MODIS MCD12Q1)",
+  landCoverYear: "Torpaq örtüyü ili",
+  dataUpdated: "Məlumat yenilənib",
 } as const;
 
 export type MessageKey = keyof typeof az;
@@ -271,6 +285,20 @@ const en: Record<MessageKey, string> = {
   "ramp.cividis": "Colorblind-safe",
   "target.det": "Hotspot count",
   "target.evt": "Event-days",
+  "nav.about": "Method",
+  "region.GR": "Greece",
+  "region.PT": "Portugal",
+  "region.ES": "Spain",
+  "source.VIIRS_NOAA21": "VIIRS NOAA-21 (375 m)",
+  countriesN: "{n} countries",
+  hotspotsN: "{n} hotspots",
+  country: "Country",
+  searchPlace: "Search a place…",
+  searchNoResult: "No match",
+  uploadFile: "Upload GeoJSON / KML",
+  landCover: "Land cover (MODIS MCD12Q1)",
+  landCoverYear: "Land cover year",
+  dataUpdated: "Data updated",
 };
 
 export const messages: Record<Locale, Record<MessageKey, string>> = { az, en };

@@ -52,6 +52,24 @@ def check_database() -> dict:
         return {"ok": False, "error": type(exc).__name__}
 
 
+def last_update() -> dict | None:
+    """Son başarılı otomatik güncelleme ve en yeni veri günü (arayüz alt bilgisi için)."""
+    try:
+        with get_pool().connection() as conn:
+            row = conn.execute(
+                """
+                SELECT (SELECT max(finished_at) FROM update_run WHERE status = 'ok'),
+                       (SELECT max(day) FROM harmonized_factor)
+                """
+            ).fetchone()
+        return {
+            "finished_at": row[0].isoformat() if row[0] else None,
+            "latest_data_day": row[1].isoformat() if row[1] else None,
+        }
+    except Exception:  # noqa: BLE001 - sağlık kontrolü hata fırlatmaz
+        return None
+
+
 @app.get("/health")
 def health() -> dict:
     db = check_database()
@@ -59,4 +77,5 @@ def health() -> dict:
         "status": "ok" if db["ok"] else "degraded",
         "database": db,
         "firms_key_configured": bool(get_settings().firms_map_key),
+        "last_update": last_update() if db["ok"] else None,
     }

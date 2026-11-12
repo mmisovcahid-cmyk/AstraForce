@@ -19,6 +19,7 @@ import { type Bbox, isRegionId, parseAreaCode, REGIONS, type RegionId, roiId } f
 import { readParams, writeParams } from "@/lib/url";
 import { useLocale } from "@/lib/useLocale";
 import { AppHeader } from "./AppHeader";
+import { PlaceSearch } from "./PlaceSearch";
 import { SOURCE_COLORS } from "./mapColors";
 
 // MapLibre tarayıcı API'lerine ihtiyaç duyar: sunucuda render edilmez.
@@ -47,6 +48,15 @@ export function Dashboard() {
   const [roi, setRoi] = useState<RoiInfo | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [drawState, setDrawState] = useState<string | null>(null);
+  const [focus, setFocus] = useState<Bbox | null>(null);
+  const [landCoverYear, setLandCoverYear] = useState<number | null>(null);
+  // Telefonda panel haritayı kaplamasın: varsayılan kapalı (çizim modunda açık)
+  const [panelOpen, setPanelOpen] = useState(true);
+  useEffect(() => {
+    if (window.innerWidth < 640 && !new URLSearchParams(window.location.search).get("draw")) {
+      setPanelOpen(false);
+    }
+  }, []);
 
   const onPolygon = async (geometry: GeoJSON.Polygon) => {
     setDrawState(t("loading"));
@@ -137,31 +147,29 @@ export function Dashboard() {
   }, []);
 
   const region = REGIONS.find((r) => r.id === regionId) ?? REGIONS[0];
-  const bbox: Bbox = roi ? roi.bbox : region.bbox;
+  const bbox: Bbox = focus ?? (roi ? roi.bbox : region.bbox);
 
   return (
     <div className="flex h-screen flex-col">
       <AppHeader active="/map" t={t} locale={locale} setLocale={setLocale}>
-        <div className="flex gap-1" role="group" aria-label={t("regions")}>
+        <select
+          value={roi ? "" : regionId}
+          aria-label={t("country")}
+          onChange={(e) => {
+            if (!isRegionId(e.target.value)) return;
+            setRoi(null);
+            setFocus(null);
+            setRegionId(e.target.value);
+          }}
+          className="rounded-md bg-fire-600 px-3 py-1.5 text-sm text-white"
+        >
+          {roi && <option value="">{t("roiLabel")}</option>}
           {REGIONS.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => {
-                setRoi(null);
-                setRegionId(r.id);
-              }}
-              aria-pressed={!roi && r.id === regionId}
-              className={`rounded-md px-3 py-1.5 text-sm transition ${
-                !roi && r.id === regionId
-                  ? "bg-fire-600 text-white"
-                  : "bg-white/5 text-gray-300 hover:bg-white/10"
-              }`}
-            >
+            <option key={r.id} value={r.id} className="bg-gray-900">
               {t(`region.${r.id}`)}
-            </button>
+            </option>
           ))}
-        </div>
+        </select>
         <StatusPills api={api} t={t} />
       </AppHeader>
 
@@ -171,11 +179,56 @@ export function Dashboard() {
           roiGeometry={roi?.geometry ?? null}
           drawing={drawing}
           onPolygon={onPolygon}
+          landCoverYear={landCoverYear}
           detections={layer === "points" && det.kind === "ready" ? det.data : null}
           cells={layer === "density" ? cells : null}
         />
 
-        <section className="absolute left-3 top-3 w-72 max-w-[calc(100%-1.5rem)] space-y-3 rounded-lg bg-gray-950/85 p-3 text-xs shadow-lg backdrop-blur">
+        <button
+          type="button"
+          onClick={() => setPanelOpen((o) => !o)}
+          aria-expanded={panelOpen}
+          aria-controls="map-panel"
+          className="absolute left-3 top-3 z-10 rounded-md bg-gray-950/90 px-3 py-1.5 text-xs shadow-lg"
+        >
+          {panelOpen ? "✕" : `☰ ${t("layer")}`}
+        </button>
+        <section
+          id="map-panel"
+          hidden={!panelOpen}
+          className="absolute left-3 top-12 max-h-[calc(100%-4rem)] w-72 max-w-[calc(100%-1.5rem)] space-y-3 overflow-y-auto rounded-lg bg-gray-950/85 p-3 text-xs shadow-lg backdrop-blur"
+        >
+          <PlaceSearch
+            placeholder={t("searchPlace")}
+            noResult={t("searchNoResult")}
+            onSelect={(p) => {
+              const d = 0.25;
+              setFocus(p.bbox ?? [p.lon - d, p.lat - d, p.lon + d, p.lat + d]);
+            }}
+          />
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={landCoverYear !== null}
+              onChange={(e) => setLandCoverYear(e.target.checked ? 2024 : null)}
+            />
+            <span className="flex-1">{t("landCover")}</span>
+            {landCoverYear !== null && (
+              <select
+                value={landCoverYear}
+                aria-label={t("landCoverYear")}
+                onChange={(e) => setLandCoverYear(Number(e.target.value))}
+                className="rounded bg-white/10 px-1 py-0.5"
+              >
+                {Array.from({ length: 24 }, (_, i) => 2024 - i).map((y) => (
+                  <option key={y} value={y} className="bg-gray-900">
+                    {y}
+                  </option>
+                ))}
+              </select>
+            )}
+          </label>
+          {landCoverYear !== null && <LandCoverLegend />}
           <button
             type="button"
             onClick={() => {
@@ -325,5 +378,32 @@ function StatusPills({ api, t }: { api: ApiState; t: (k: MessageKey) => string }
         <span className="text-amber-300">⚠ {t("firmsKeyMissing")}</span>
       )}
     </>
+  );
+}
+
+// MCD12Q1 IGBP sınıflarının (GIBS paleti) gruplanmış lejantı
+const LAND_COVER_LEGEND: [string, string][] = [
+  ["#086a10", "Forest"],
+  ["#c6b044", "Shrubland"],
+  ["#fbff13", "Savanna"],
+  ["#b6ff05", "Grassland"],
+  ["#c24f44", "Cropland"],
+  ["#ff6d4c", "Crop/natural mosaic"],
+  ["#27ff87", "Wetland"],
+  ["#a5a5a5", "Urban"],
+  ["#f9ffa4", "Barren"],
+  ["#1c0dff", "Water"],
+];
+
+function LandCoverLegend() {
+  return (
+    <ul className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] text-gray-300">
+      {LAND_COVER_LEGEND.map(([c, name]) => (
+        <li key={name} className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: c }} />
+          {name}
+        </li>
+      ))}
+    </ul>
   );
 }
