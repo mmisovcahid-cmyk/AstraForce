@@ -150,6 +150,8 @@ const az = {
   uploadFile: "GeoJSON / KML yüklə",
   landCover: "Torpaq örtüyü (MODIS MCD12Q1)",
   landCoverYear: "Torpaq örtüyü ili",
+  staticSources: "Statik ısı kaynakları",
+  showStaticSources: "Statik kaynakları göster",
   dataUpdated: "Məlumat yenilənib",
 } as const;
 
@@ -304,6 +306,8 @@ const en: Record<MessageKey, string> = {
   uploadFile: "Upload GeoJSON / KML",
   landCover: "Land cover (MODIS MCD12Q1)",
   landCoverYear: "Land cover year",
+  staticSources: "Static heat sources",
+  showStaticSources: "Show static heat sources",
   dataUpdated: "Data updated",
 };
 

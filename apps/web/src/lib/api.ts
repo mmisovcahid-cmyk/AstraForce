@@ -239,6 +239,25 @@ export type CellCollection = FeatureCollection<
   { h3: string; hotspots: number; hfi: number; frp: number; days: number }
 > & { meta: { cells: number; total: number; max: number } };
 
+export type StaticSourceProps = {
+  h3: string;
+  reason: "nasa_type2" | "persistent" | "neighbor";
+  center_lat: number;
+  center_lon: number;
+};
+
+export type StaticSources = FeatureCollection<Polygon, StaticSourceProps>;
+
+export function fetchStaticSources(
+  params: { country?: string; reason?: string },
+  signal?: AbortSignal,
+) {
+  const q = new URLSearchParams();
+  if (params.country) q.set("country", params.country);
+  if (params.reason) q.set("reason", params.reason);
+  return getJson<StaticSources>(`/static-sources?${q}`, signal);
+}
+
 export function fetchCells(
   params: { area: string; dateFrom: string; dateTo: string },
   signal?: AbortSignal,

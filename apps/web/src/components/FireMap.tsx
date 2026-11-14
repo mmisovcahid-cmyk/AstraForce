@@ -38,6 +38,8 @@ export function FireMap({
   drawing = false,
   onPolygon,
   landCoverYear = null,
+  staticSources = null,
+  showStaticSources = false,
 }: {
   bbox: Bbox;
   detections: Detections | null;
@@ -49,6 +51,10 @@ export function FireMap({
   onPolygon?: (geometry: GeoJSON.Polygon) => void;
   /** NASA GIBS MODIS MCD12Q1 (IGBP) arazi örtüsü katmanı; null = kapalı. */
   landCoverYear?: number | null;
+  /** Statik ısı kaynakları (meşale, endüstri) GeoJSON katmanı. */
+  staticSources?: GeoJSON.FeatureCollection | null;
+  /** Statik kaynak katmanının haritada gösterilip gösterilmeyeceği. */
+  showStaticSources?: boolean;
 }) {
   const latestLandCover = useRef<number | null>(landCoverYear);
   const drawRef = useRef<TerraDraw | null>(null);
@@ -130,6 +136,19 @@ export function FireMap({
           "circle-stroke-width": 0.5,
         },
       });
+      // Statik ısı kaynakları katmanı (meşale, endüstri) — varsayılan gizli
+      m.addSource("static-sources", { type: "geojson", data: EMPTY });
+      m.addLayer({
+        id: "static-sources",
+        type: "fill",
+        source: "static-sources",
+        paint: {
+          "fill-color": "#ef4444",
+          "fill-opacity": 0.35,
+          "fill-outline-color": "#b91c1c",
+        },
+      });
+      m.setLayoutProperty("static-sources", "visibility", "none");
 
       const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
       m.on("mouseenter", "detections", (e) => {
@@ -188,6 +207,20 @@ export function FireMap({
     const src = map.current?.getSource("cells") as maplibregl.GeoJSONSource | undefined;
     src?.setData(latestCells.current);
   }, [cells]);
+
+  // Statik ısı kaynakları katmanı: veri geldiğinde source'u güncelle
+  useEffect(() => {
+    const src = map.current?.getSource("static-sources") as maplibregl.GeoJSONSource | undefined;
+    if (src) src.setData(staticSources ?? EMPTY);
+  }, [staticSources]);
+
+  // Statik kaynak katmanı görünürlüğü toggle
+  useEffect(() => {
+    const m = map.current;
+    if (m?.isStyleLoaded() && m.getLayer("static-sources")) {
+      m.setLayoutProperty("static-sources", "visibility", showStaticSources ? "visible" : "none");
+    }
+  }, [showStaticSources]);
 
   useEffect(() => {
     latestRoi.current = roiGeometry

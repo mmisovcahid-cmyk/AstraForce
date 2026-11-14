@@ -8,6 +8,7 @@ import {
   type Detections,
   fetchCells,
   fetchRoi,
+  fetchStaticSources,
   type RoiInfo,
   fetchDetections,
   fetchHealth,
@@ -50,6 +51,8 @@ export function Dashboard() {
   const [drawState, setDrawState] = useState<string | null>(null);
   const [focus, setFocus] = useState<Bbox | null>(null);
   const [landCoverYear, setLandCoverYear] = useState<number | null>(null);
+  const [staticSources, setStaticSources] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [showStaticSources, setShowStaticSources] = useState(false);
   // Telefonda panel haritayı kaplamasın: varsayılan kapalı (çizim modunda açık)
   const [panelOpen, setPanelOpen] = useState(true);
   useEffect(() => {
@@ -131,6 +134,15 @@ export function Dashboard() {
   }, [apiUp, ready, layer, regionId, roi, endDate, rangeDays]);
 
   useEffect(() => {
+    if (!apiUp || !ready) return;
+    const ctrl = new AbortController();
+    fetchStaticSources({ country: regionId }, ctrl.signal)
+      .then((data) => setStaticSources(data))
+      .catch(() => !ctrl.signal.aborted && setStaticSources(null));
+    return () => ctrl.abort();
+  }, [apiUp, ready, regionId]);
+
+  useEffect(() => {
     const ctrl = new AbortController();
     const check = () =>
       fetchHealth(ctrl.signal)
@@ -180,6 +192,8 @@ export function Dashboard() {
           drawing={drawing}
           onPolygon={onPolygon}
           landCoverYear={landCoverYear}
+          staticSources={staticSources}
+          showStaticSources={showStaticSources}
           detections={layer === "points" && det.kind === "ready" ? det.data : null}
           cells={layer === "density" ? cells : null}
         />
@@ -229,6 +243,19 @@ export function Dashboard() {
             )}
           </label>
           {landCoverYear !== null && <LandCoverLegend />}
+          <label className="flex items-center gap-2 mt-2">
+            <input
+              type="checkbox"
+              checked={showStaticSources}
+              onChange={(e) => setShowStaticSources(e.target.checked)}
+            />
+            <span className="flex-1">{t("showStaticSources")}</span>
+          </label>
+          {showStaticSources && (
+            <p className="text-gray-400 text-[11px] mt-1">
+              {t("staticSources")} · {staticSources?.features.length ?? 0} hücre
+            </p>
+          )}
           <button
             type="button"
             onClick={() => {
