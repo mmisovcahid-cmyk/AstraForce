@@ -22,6 +22,5 @@ data/
 Thumbs.db
 
 # Kişisel / yerel dosyalar
-Front test/
 .claude/settings.local.json
 plan.pdf

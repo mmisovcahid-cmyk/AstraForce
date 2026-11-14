@@ -5,7 +5,6 @@
 **/.pytest_cache
 **/.ruff_cache
 data
-Front test
 .git
 .env
 *.pdf

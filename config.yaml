@@ -1,0 +1,74 @@
+# Unified Fire Calendar Configuration
+# NASA Space Apps 2026: Harmonization of MODIS and VIIRS Hot Spots
+
+project:
+  name: "Unified Fire Calendar"
+  version: "1.0.0"
+  demo_mode: false # Set true to run on synthetic demo data without FIRMS raw downloads
+
+spatial:
+  h3_resolution: 6 # Default cell resolution (~36 km^2 per hexagon)
+  coarse_parent_res: 3 # Parent cell resolution for spatial target encoding
+  max_roi_area_km2: 500000.0 # Maximum allowed ROI area to guard memory and performance
+  default_region:
+    name: "Azerbaijan"
+    bbox: [44.7, 38.3, 50.7, 42.0] # [min_lon, min_lat, max_lon, max_lat]
+
+dates:
+  # Historical sensor milestones and operational thresholds
+  terra_start: "2000-11-01"
+  aqua_start: "2002-07-04"
+  snpp_start: "2012-01-20"
+  noaa20_start: "2018-01-01"
+  noaa21_start: "2023-01-01"
+
+  # MODIS orbital drift / trusted baseline boundary.
+  # Terra and Aqua equatorial crossing times drifted starting around 2020-2022.
+  # Before this date, observed MODIS union is trusted as ground truth.
+  # After this date, harmonized estimate is model-derived from VIIRS reference.
+  modis_trust_end: "2022-12-31"
+
+  # Harmonization model training and validation windows
+  # Training strictly precedes the drift period to avoid corrupting the transfer function.
+  model_train_start: "2012-01-20"
+  model_train_end: "2020-12-31"
+  model_val_start: "2021-01-01"
+  model_val_end: "2022-12-31"
+
+sensors:
+  reference_viirs_primary: "S-NPP"
+  reference_viirs_secondary: "NOAA-20" # Takes over if S-NPP is unavailable
+  raw_only: ["NOAA-21"]
+
+confidence_mapping:
+  modis:
+    low_cutoff: 30
+    high_cutoff: 80
+  viirs:
+    low: ["l", "low", "0"]
+    nominal: ["n", "nominal", "nom", "1"]
+    high: ["h", "high", "2"]
+
+static_mask:
+  # Type codes in FIRMS archive (0 = presumed vegetation fire, 1 = active volcano, 2 = other static land source, 3 = offshore)
+  exclude_types: [1, 2, 3]
+  min_years_span: 5
+  month_frequency_threshold: 0.60 # >= 60% of calendar months active over >= 5 years
+
+model:
+  classifier_type: "hist_gradient_boosting" # 'hist_gradient_boosting' or 'logistic_regression'
+  calibrate: true
+  spatial_holdout_ratio: 0.20
+  random_state: 42
+  shrinkage_weight: 10.0 # Prior weight for alpha shrinkage towards global mean
+
+paths:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  demo_dir: "data/demo"
+  cache_dir: "data/cache"
+  static_mask_path: "data/processed/static_mask_h3_res6.parquet"
+  celldays_path: "data/processed/celldays.parquet"
+  harmonized_path: "data/processed/harmonized_cellday.parquet"
+  model_path: "reports/model.joblib"
+  validation_report: "reports/validation.json"

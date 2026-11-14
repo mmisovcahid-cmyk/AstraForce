@@ -58,35 +58,37 @@ pnpm dev                                    # http://localhost:3000 (API on :800
 
 Run `pnpm test` (pytest and vitest) and `pnpm lint`. `pnpm update:daily` refreshes the near-real-time data and re-harmonizes; it is the same job the server runs every day. `pnpm db:optimize` physically orders hotspots by location, which makes large drawn areas much faster; it needs free disk space about the size of the `fire_detection` table (~10 GB), so it is not part of `--bootstrap` (add `--optimize` if the disk allows).
 
-## Deploy on Render
+## Yerel Çalıştırma (Local-Only)
 
-`render.yaml` is a Render Blueprint: **New → Blueprint →** pick this repo. It creates four services:
-
-| Service | Type | What it is |
-|---|---|---|
-| `astraforce-db` | Private service + 20 GB disk | PostGIS 3.6 + **H3**. Render's managed Postgres has no H3 extension, so the database runs from `db/Dockerfile`. |
-| `astraforce-api` | Web service | FastAPI. Migrations run on start. |
-| `astraforce-web` | Web service | Next.js. The browser only talks to this service; it forwards `/api/*` to the API over Render's private network, so no CORS setup is needed. |
-| `astraforce-update` | Cron job, 05:30 UTC daily | `python -m app.update`: newest FIRMS data plus re-harmonization. |
-
-All services are in the same region (Frankfurt), which the private network requires. The only secret to enter is **`FIRMS_MAP_KEY`**, on api and update.
-
-Load the 25-year data once, by either route:
-
-- **Fast (recommended):** run `pnpm db:dump` locally and upload `data/dumps/astraforce.dump` somewhere it can be downloaded (a cloud bucket, or any direct-download link). Set **`DUMP_URL`** on `astraforce-db` **before its first start**. The database restores the dump on first boot, via `db/init/02-restore-dump.sh`.
-- **Slow (~1.5 h, nothing to upload):** in the `astraforce-update` cron job, use *Trigger Run* once with the command `python -m app.update --bootstrap`.
-
-Plans: the database needs ≥ 2 GB RAM. The update job needs about 2–3 GB, because it holds US harmonization in memory. Free instances are not enough.
-
-### Other hosts
-
-`docker-compose.prod.yml` runs the same stack plus Caddy (automatic HTTPS) on any VM:
+AstraForce şu an sadece yerel geliştirme için yapılandırılmıştır. Render dağıtımı (`render.yaml`, `docker-compose.prod.yml`, Caddy) kaldırılmıştır.
 
 ```bash
-pnpm db:dump                                   # on your machine → data/dumps/astraforce.dump
-export DOMAIN=fires.example.org POSTGRES_PASSWORD=change-me
-sh scripts/restore-db.sh && docker compose -f docker-compose.prod.yml up -d --build
+# 1. Veritabanını başlat (PostGIS 17 + H3, port 5433)
+pnpm db:up
+
+# 2. Migrasyonları uygula
+pnpm db:migrate
+
+# 3. Veriyi yükle (ilk sefer, ~1 sa; durable/idempotent)
+pnpm ingest all --country AZ,TR,US,AR,GR,PT
+
+# 4. Harmonizasyonu çalıştır (maske, olaylar, kalibrasyon)
+pnpm harmonize run --country AZ,TR,US,AR,GR,PT
+
+# 5. Uygulamayı başlat (web:3000, api:8000)
+pnpm dev
 ```
+
+### Demo / Senteşik Veri (FIRMS anahtarı olmadan)
+
+`scripts/synthetic_generate.py` kullanarak Azerbaycan için gerçekçi senteşik FIRMS verisi üretebilir ve boru hattını test edebilirsiniz:
+
+```bash
+python scripts/synthetic_generate.py
+# ardından ingest + harmonize akışını normal şekilde çalıştırın
+```
+
+Senteşik veri, mevcut FIRMS CSV başlıklarını ve sensör fiziklerini taklit eder; `FIRMS_MAP_KEY` gerektirmez.
 
 ## Stack
 
@@ -102,3 +104,9 @@ Active fire data: **NASA FIRMS** (MODIS Collection 6.1 MCD14; VIIRS 375 m VNP14I
 - The land cover overlay is visual only; per-fire land cover statistics are not computed.
 - Near-real-time days are provisional. They are marked on the calendar and replaced by standard-processing data when NASA publishes it.
 - Calibration is per country. Small areas inherit their country's daily factors.
+
+## Dokümantasyon
+
+- `docs/METHODS.md` — bilimsel harmonizasyon yöntemi (MODIS/VIIRS sensör ayrımı, H3 hücre-gün, yerel gün içi tarih, statik maske, kalibrasyon modeli)
+- `docs/LIMITATIONS.md` — bilimsel sınırlamalar ve varsayımlar (bulut kapaması, gece/gece geçişi, erken MODIS dönemi, burned area vs cell-day)
+- `config.yaml` — işletimsel yapılandırma (H3 çözünürlüğü, tarih eşikleri, güven seviyeleri, model parametreleri)

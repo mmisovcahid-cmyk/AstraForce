@@ -20,7 +20,6 @@
     "db:psql": "docker compose exec db psql -U astra -d astraforce",
     "harmonize": "pnpm --silent --filter api harmonize",
     "db:dump": "node scripts/dump-db.mjs",
-    "prod:build": "docker compose -f docker-compose.prod.yml build",
     "update:daily": "pnpm --silent --filter api run update",
     "db:optimize": "pnpm --filter api optimize"
   },
