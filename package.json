@@ -19,6 +19,7 @@
     "db:logs": "docker compose logs -f db",
     "db:psql": "docker compose exec db psql -U astra -d astraforce",
     "harmonize": "pnpm --silent --filter api harmonize",
+    "add-country": "python scripts/add_country.py",
     "db:dump": "node scripts/dump-db.mjs",
     "update:daily": "pnpm --silent --filter api run update",
     "db:optimize": "pnpm --filter api optimize"

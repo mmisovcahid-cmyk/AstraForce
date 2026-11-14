@@ -16,7 +16,7 @@ pnpm harmonize run --country AZ,TR,US,AR,GR,PT
 pnpm dev            # web :3000 + API :8000 (concurrently)
 ```
 - `pnpm db:reset` wipes the DB volume (all ingested data), re-runs `db/init/*.sql` and migrations.
-- Supported countries: AZ, TR, US, AR, GR, PT. Adding a country requires `COUNTRIES` in `apps/api/app/ingest/sources.py` AND `REGIONS` in `apps/web/src/lib/regions.ts`, then `ingest` + `harmonize`.
+- Supported countries: AZ, TR, US, AR, GR, PT. Add a new country with `pnpm add-country --code XX --name "Adı" --archive-name "Arşiv_Adı" --bbox "w,s,e,n"` (edits `sources.py` + `regions.ts`, then runs `ingest` + `harmonize`).
 
 ## PowerShell quirk (read this first)
 On Windows PowerShell, `--country AZ,TR,US` arrives as `"AZ TR US"`. List arguments must be split on commas **and** whitespace (handled in `apps/api/app/ingest/sources.py` and the harmonize CLI).
