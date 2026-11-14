@@ -10,6 +10,7 @@
     "dev": "concurrently -k -n web,api -c cyan,magenta \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
     "build": "pnpm --filter web build",
     "test": "pnpm -r --workspace-concurrency=1 test",
+    "test:e2e": "pnpm --filter web test:e2e",
     "lint": "pnpm -r lint",
     "ingest": "pnpm --silent --filter api ingest",
     "db:up": "docker compose up -d --build --wait",

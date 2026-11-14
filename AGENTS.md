@@ -26,6 +26,7 @@ On Windows PowerShell, `--country AZ,TR,US` arrives as `"AZ TR US"`. List argume
 |------|---------|-------|
 | All tests | `pnpm test` | vitest (web) + pytest (api) |
 | All lint | `pnpm lint` | `tsc --noEmit` (web) + `ruff check` (api) |
+| E2E responsive tests | `pnpm test:e2e` | Playwright (mobile + desktop viewports) |
 | Build web | `pnpm build` / `pnpm --filter web build` | |
 | Single API test | `cd apps/api && uv run pytest tests/test_parse.py::test_acq_time_padding` | `db`-marked tests hit real DB in rolled-back txn, skip if DB down |
 | Single web test | `pnpm --filter web exec vitest run -t "bboxes"` | |
