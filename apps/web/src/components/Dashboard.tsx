@@ -6,6 +6,8 @@ import {
   type CellCollection,
   createRoi,
   type Detections,
+  fetchBurnedArea,
+  fetchBurnedAreaSummary,
   fetchCells,
   fetchRoi,
   fetchStaticSources,
@@ -53,6 +55,9 @@ export function Dashboard() {
   const [landCoverYear, setLandCoverYear] = useState<number | null>(null);
   const [staticSources, setStaticSources] = useState<GeoJSON.FeatureCollection | null>(null);
   const [showStaticSources, setShowStaticSources] = useState(false);
+  const [burnedAreas, setBurnedAreas] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [showBurnedAreas, setShowBurnedAreas] = useState(false);
+  const [burnedAreaSummary, setBurnedAreaSummary] = useState<{ total_ha: number; cells: number } | null>(null);
   // Telefonda panel haritayı kaplamasın: varsayılan kapalı (çizim modunda açık)
   const [panelOpen, setPanelOpen] = useState(true);
   useEffect(() => {
@@ -143,6 +148,27 @@ export function Dashboard() {
   }, [apiUp, ready, regionId]);
 
   useEffect(() => {
+    if (!apiUp || !ready) return;
+    const ctrl = new AbortController();
+    const { dateFrom, dateTo } = rangeEndingOn(endDate, rangeDays);
+    Promise.all([
+      fetchBurnedArea(
+        { area: roi?.area ?? regionId, dateFrom, dateTo },
+        ctrl.signal,
+      ).then((data) => setBurnedAreas(data)),
+      fetchBurnedAreaSummary(
+        { area: roi?.area ?? regionId, dateFrom, dateTo },
+        ctrl.signal,
+      ).then((data) => {
+        const total = data.sensors.reduce((acc, s) => acc + s.total_ha, 0);
+        const cells = data.sensors.reduce((acc, s) => acc + s.cells, 0);
+        setBurnedAreaSummary({ total_ha: total, cells });
+      }),
+    ]).catch(() => !ctrl.signal.aborted && (setBurnedAreas(null), setBurnedAreaSummary(null)));
+    return () => ctrl.abort();
+  }, [apiUp, ready, regionId, roi, endDate, rangeDays]);
+
+  useEffect(() => {
     const ctrl = new AbortController();
     const check = () =>
       fetchHealth(ctrl.signal)
@@ -194,6 +220,8 @@ export function Dashboard() {
           landCoverYear={landCoverYear}
           staticSources={staticSources}
           showStaticSources={showStaticSources}
+          burnedAreas={burnedAreas}
+          showBurnedAreas={showBurnedAreas}
           detections={layer === "points" && det.kind === "ready" ? det.data : null}
           cells={layer === "density" ? cells : null}
         />
@@ -254,6 +282,19 @@ export function Dashboard() {
           {showStaticSources && (
             <p className="text-gray-400 text-[11px] mt-1">
               {t("staticSources")} · {staticSources?.features.length ?? 0} hücre
+            </p>
+          )}
+          <label className="flex items-center gap-2 mt-2">
+            <input
+              type="checkbox"
+              checked={showBurnedAreas}
+              onChange={(e) => setShowBurnedAreas(e.target.checked)}
+            />
+            <span className="flex-1">{t("showBurnedAreas")}</span>
+          </label>
+          {showBurnedAreas && burnedAreaSummary && (
+            <p className="text-gray-400 text-[11px] mt-1">
+              {t("burnedAreas")} · {burnedAreaSummary.cells} hücre · {burnedAreaSummary.total_ha.toLocaleString(undefined, { maximumFractionDigits: 1 })} ha
             </p>
           )}
           <button

@@ -40,6 +40,8 @@ export function FireMap({
   landCoverYear = null,
   staticSources = null,
   showStaticSources = false,
+  burnedAreas = null,
+  showBurnedAreas = false,
 }: {
   bbox: Bbox;
   detections: Detections | null;
@@ -55,6 +57,10 @@ export function FireMap({
   staticSources?: GeoJSON.FeatureCollection | null;
   /** Statik kaynak katmanının haritada gösterilip gösterilmeyeceği. */
   showStaticSources?: boolean;
+  /** Yanık alan hücreleri GeoJSON katmanı. */
+  burnedAreas?: GeoJSON.FeatureCollection | null;
+  /** Yanık alan katmanının haritada gösterilip gösterilmeyeceği. */
+  showBurnedAreas?: boolean;
 }) {
   const latestLandCover = useRef<number | null>(landCoverYear);
   const drawRef = useRef<TerraDraw | null>(null);
@@ -149,6 +155,19 @@ export function FireMap({
         },
       });
       m.setLayoutProperty("static-sources", "visibility", "none");
+      // Yanık alan katmanı (burned area) — varsayılan gizli
+      m.addSource("burned-areas", { type: "geojson", data: EMPTY });
+      m.addLayer({
+        id: "burned-areas",
+        type: "fill",
+        source: "burned-areas",
+        paint: {
+          "fill-color": "#f59e0b",
+          "fill-opacity": 0.45,
+          "fill-outline-color": "#d97706",
+        },
+      });
+      m.setLayoutProperty("burned-areas", "visibility", "none");
 
       const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
       m.on("mouseenter", "detections", (e) => {
@@ -214,6 +233,12 @@ export function FireMap({
     if (src) src.setData(staticSources ?? EMPTY);
   }, [staticSources]);
 
+  // Yanık alan katmanı: veri geldiğinde source'u güncelle
+  useEffect(() => {
+    const src = map.current?.getSource("burned-areas") as maplibregl.GeoJSONSource | undefined;
+    if (src) src.setData(burnedAreas ?? EMPTY);
+  }, [burnedAreas]);
+
   // Statik kaynak katmanı görünürlüğü toggle
   useEffect(() => {
     const m = map.current;
@@ -221,6 +246,14 @@ export function FireMap({
       m.setLayoutProperty("static-sources", "visibility", showStaticSources ? "visible" : "none");
     }
   }, [showStaticSources]);
+
+  // Yanık alan katmanı görünürlüğü toggle
+  useEffect(() => {
+    const m = map.current;
+    if (m?.isStyleLoaded() && m.getLayer("burned-areas")) {
+      m.setLayoutProperty("burned-areas", "visibility", showBurnedAreas ? "visible" : "none");
+    }
+  }, [showBurnedAreas]);
 
   useEffect(() => {
     latestRoi.current = roiGeometry

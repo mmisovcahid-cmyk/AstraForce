@@ -152,6 +152,8 @@ const az = {
   landCoverYear: "Torpaq örtüyü ili",
   staticSources: "Statik ısı kaynakları",
   showStaticSources: "Statik kaynakları göster",
+  burnedAreas: "Yanık alan",
+  showBurnedAreas: "Yanık alan katmanını göster",
   dataUpdated: "Məlumat yenilənib",
 } as const;
 
@@ -308,6 +310,8 @@ const en: Record<MessageKey, string> = {
   landCoverYear: "Land cover year",
   staticSources: "Static heat sources",
   showStaticSources: "Show static heat sources",
+  burnedAreas: "Burned area",
+  showBurnedAreas: "Show burned area layer",
   dataUpdated: "Data updated",
 };
 

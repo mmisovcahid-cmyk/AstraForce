@@ -16,6 +16,7 @@ import psycopg
 from app.config import get_settings
 from app.ingest.archive import ingest_archive
 from app.ingest.boundaries import has_boundaries, ingest_boundaries
+from app.ingest.burned_area import ingest_burned_area
 from app.ingest.firms_api import FirmsApiError, ingest_api
 from app.ingest.http import make_client
 from app.ingest.sources import SOURCES, parse_countries, parse_sources, parse_years
@@ -49,6 +50,17 @@ def _build_parser() -> argparse.ArgumentParser:
     common(al)
 
     sub.add_parser("status", help="yüklenen veri özeti")
+
+    ba = sub.add_parser("burned_area", help="NASA MCD64A1 / VNP64A1 yanık alan verisi")
+    common(ba)
+    ba.add_argument("--year", type=int, required=True, help="Yıl (ör. 2021)")
+    ba.add_argument("--month", type=int, required=True, help="Ay (1-12)")
+    ba.add_argument(
+        "--sensor",
+        default="MODIS_MCD64A1",
+        choices=["MODIS_MCD64A1", "VIIRS_VNP64A1"],
+        help="Sensör ürünü (varsayılan: MODIS_MCD64A1)",
+    )
     return p
 
 
@@ -96,6 +108,23 @@ def main(argv: list[str] | None = None) -> int:
             return 3
         if args.cmd == "boundaries":
             print(f"{ingest_boundaries(conn, client)} ülke sınırı yüklendi")
+            return 0
+
+        if args.cmd == "burned_area":
+            try:
+                countries = parse_countries(args.country)
+            except ValueError as e:
+                print(f"Hata: {e}", file=sys.stderr)
+                return 2
+            n = ingest_burned_area(
+                conn,
+                [c.iso2 for c in countries],
+                args.year,
+                args.month,
+                args.sensor,
+                args.force,
+            )
+            print(f"{n} yanık alan kaydı yüklendi ({args.sensor}, {args.year}-{args.month:02d})")
             return 0
 
         try:

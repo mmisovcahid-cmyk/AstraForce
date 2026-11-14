@@ -258,6 +258,65 @@ export function fetchStaticSources(
   return getJson<StaticSources>(`/static-sources?${q}`, signal);
 }
 
+export type BurnedAreaProps = {
+  h3: string;
+  year: number;
+  month: number;
+  sensor: string;
+  burn_date: string | null;
+  burned_ha: number;
+  confidence: number;
+  center_lat: number;
+  center_lon: number;
+};
+
+export type BurnedArea = FeatureCollection<Polygon, BurnedAreaProps>;
+
+export type BurnedAreaSensorSummary = {
+  sensor: string;
+  cells: number;
+  total_ha: number;
+  first_burn: string | null;
+  last_burn: string | null;
+};
+
+export type BurnedAreaSummary = {
+  area: string;
+  date_from: string;
+  date_to: string;
+  sensors: BurnedAreaSensorSummary[];
+};
+
+export function fetchBurnedArea(
+  params: {
+    area: string;
+    dateFrom: string;
+    dateTo: string;
+    sensor?: string;
+  },
+  signal?: AbortSignal,
+) {
+  const q = new URLSearchParams({
+    area: params.area,
+    date_from: params.dateFrom,
+    date_to: params.dateTo,
+  });
+  if (params.sensor) q.set("sensor", params.sensor);
+  return getJson<BurnedArea>(`/burned-area?${q}`, signal);
+}
+
+export function fetchBurnedAreaSummary(
+  params: { area: string; dateFrom: string; dateTo: string },
+  signal?: AbortSignal,
+) {
+  const q = new URLSearchParams({
+    area: params.area,
+    date_from: params.dateFrom,
+    date_to: params.dateTo,
+  });
+  return getJson<BurnedAreaSummary>(`/burned-area/summary?${q}`, signal);
+}
+
 export function fetchCells(
   params: { area: string; dateFrom: string; dateTo: string },
   signal?: AbortSignal,
