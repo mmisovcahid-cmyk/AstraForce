@@ -32,6 +32,7 @@ from app.areas import (
     AreaError,
     AreaNotReady,
     daily_series,
+    data_until,
     parse_area,
     raw_counts,
 )
@@ -59,15 +60,21 @@ def not_ready_response(e: AreaNotReady) -> JSONResponse:
 
 
 def load_series(area: Area) -> tuple[pd.DataFrame, date]:
-    """Alanın günlük serisi. ROI hazır değilse AreaNotReady yükselir."""
+    """Alanın günlük serisi ve "as_of" günü. ROI hazır değilse AreaNotReady yükselir.
+
+    as_of = verinin bulunduğu son gün (bugünden ileri değil). Analitik bu güne göre yapılır:
+    henüz gelmemiş 1–2 gün "yangın yok" sayılırsa anomaliler sistematik olarak düşük çıkar.
+    """
     with get_pool().connection() as conn:
         try:
             df = daily_series(conn, area)
         except AreaError as e:
             raise HTTPException(404, str(e)) from e
+        last = data_until(conn, area)
     if area.kind == "country" and df.empty:
         raise HTTPException(404, f"{area.key} için harmonizasyon yok (pnpm harmonize run)")
-    return df, date.today()
+    today = date.today()
+    return df, min(last, today) if last else today
 
 
 def full(df: pd.DataFrame, metric: str, today: date) -> pd.Series:
@@ -238,14 +245,8 @@ def status(area: AreaQ, metric: Metric = "hotspots"):
     except AreaNotReady as e:
         return not_ready_response(e)
     out = current_status(full(df, metric, today), today)
-    latest = df.index.max() if not df.empty else None
-    out.update(
-        {
-            "area": a.code,
-            "metric": metric,
-            "latest_data_day": latest.date().isoformat() if latest is not None else None,
-        }
-    )
+    # today = as_of: verinin bulunduğu son gün (son yangınlı gün değil)
+    out.update({"area": a.code, "metric": metric, "latest_data_day": today.isoformat()})
     return out
 
 
@@ -273,19 +274,28 @@ def range_summary(area: AreaQ, date_from: date, date_to: date, metric: Metric = 
     except AreaNotReady as e:
         return not_ready_response(e)
     s = full(df, metric, today)
-
-    def total(f: date, t: date) -> float:
-        return float(s[(s.index >= pd.Timestamp(f)) & (s.index <= pd.Timestamp(t))].sum())
-
-    value = total(date_from, date_to)
-    hist = [total(*same_range_in_year(date_from, date_to, y)) for y in base_years(today)]
-    med = float(np.median(hist)) if hist else 0.0
-    sel = s[(s.index >= pd.Timestamp(date_from)) & (s.index <= pd.Timestamp(date_to))]
-    return {
+    # Aralığın verisi henüz gelmemiş kısmı (as_of sonrası) hem seçimden hem tarihsel
+    # karşılaştırmadan çıkarılır; yoksa eksik günler "yangın yok" sayılır.
+    eff_to = min(date_to, today)
+    base = {
         "area": a.code,
         "metric": metric,
         "date_from": date_from.isoformat(),
         "date_to": date_to.isoformat(),
+        "effective_date_to": eff_to.isoformat() if eff_to >= date_from else None,
+    }
+    if eff_to < date_from:
+        return {**base, "total": None, "median": None, "anomaly_pct": None, "fire_days": 0}
+
+    def total(f: date, t: date) -> float:
+        return float(s[(s.index >= pd.Timestamp(f)) & (s.index <= pd.Timestamp(t))].sum())
+
+    value = total(date_from, eff_to)
+    hist = [total(*same_range_in_year(date_from, eff_to, y)) for y in base_years(today)]
+    med = float(np.median(hist)) if hist else 0.0
+    sel = s[(s.index >= pd.Timestamp(date_from)) & (s.index <= pd.Timestamp(eff_to))]
+    return {
+        **base,
         "total": round(value, 2),
         "median": round(med, 2),
         "anomaly_pct": anomaly_pct(value, med),

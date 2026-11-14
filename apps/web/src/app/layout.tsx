@@ -9,7 +9,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang={process.env.NEXT_PUBLIC_DEFAULT_LOCALE ?? "en"}>
+    // Tarayıcı eklentileri <html>'e özellik ekleyebiliyor (ör. crxlauncher); bu fark
+    // hydration uyarısı vermesin. Yalnızca bu etiketin kendi özelliklerini etkiler.
+    <html lang={process.env.NEXT_PUBLIC_DEFAULT_LOCALE ?? "en"} suppressHydrationWarning>
       <body className="antialiased">{children}</body>
     </html>
   );

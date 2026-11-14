@@ -11,8 +11,9 @@ from app.routes import analytics, data, export, harmonized, roi
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # Yarıda kalan ROI hesaplamaları açılışta sıfırlanmaz (birden çok worker varken diğerinin
+    # sürmekte olan işini bozardı); heartbeat'i eskiyen bölge sonraki istekte devralınır.
     open_pool()
-    _reset_interrupted_rois()
     yield
     close_pool()
 
@@ -29,15 +30,6 @@ app.include_router(harmonized.router)
 app.include_router(analytics.router)
 app.include_router(roi.router)
 app.include_router(export.router)
-
-
-def _reset_interrupted_rois() -> None:
-    """Yeniden başlatmada yarıda kalan bölge hesaplamaları, bir sonraki istekte yeniden başlar."""
-    try:
-        with get_pool().connection() as conn:
-            conn.execute("UPDATE roi SET status = 'pending' WHERE status = 'running'")
-    except Exception:  # noqa: BLE001 - veritabanı kapalıysa API yine de açılmalı
-        pass
 
 
 def check_database() -> dict:

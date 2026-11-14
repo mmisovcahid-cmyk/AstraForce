@@ -10,7 +10,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-astra_local_dev}
       POSTGRES_DB: ${POSTGRES_DB:-astraforce}
     ports:
-      - "${POSTGRES_PORT:-5433}:5432"
+      # Yalnızca bu bilgisayardan erişilebilir (varsayılan parolayla yerel ağa açılmasın)
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro

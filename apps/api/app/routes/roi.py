@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
-from app.areas import AreaError, compute_roi, create_roi, roi_info
+from app.areas import AreaError, compute_roi, create_roi, retry_roi, roi_info
 from app.db import get_pool
 
 router = APIRouter(prefix="/roi")
@@ -24,9 +24,15 @@ class RoiIn(BaseModel):
 
 
 def _schedule_if_needed(info: dict, background: BackgroundTasks) -> dict:
-    if info["status"] in ("pending", "error"):
+    """Bekleyen ya da sahipsiz kalmış bölgeyi arka planda hesaplatır.
+
+    Asıl sahiplenme compute_roi içinde veritabanında atomik yapılır; aynı anda gelen yoklamalar
+    ya da birden çok worker aynı bölgeyi iki kez hesaplamaz. 'error' burada yeniden denenmez:
+    kullanıcı POST /roi/{id}/retry ile ister.
+    """
+    if info["status"] == "pending" or info.get("stale"):
+        # Durum olduğu gibi döner: sıra doluysa bölge 'pending' kalır, sonraki yoklamada dener
         background.add_task(compute_roi, get_pool(), info["id"])
-        info = {**info, "status": "running" if info["status"] == "pending" else info["status"]}
     return info
 
 
@@ -55,5 +61,17 @@ def get(rid: str, background: BackgroundTasks) -> dict:
             info = roi_info(conn, rid.lower())
         except AreaError as e:
             raise HTTPException(404, str(e)) from e
-    # Harmonizasyon yenilendiyse (status=pending) ya da önceki deneme hata verdiyse yeniden hesapla
+    # Harmonizasyon yenilendiyse (status=pending) ya da hesaplayan worker düştüyse yeniden hesapla
+    return _schedule_if_needed(info, background)
+
+
+@router.post("/{rid}/retry")
+def retry(rid: str, background: BackgroundTasks) -> dict:
+    """Hata vermiş bölgenin hesaplamasını yeniden başlatır."""
+    with get_pool().connection() as conn:
+        try:
+            retry_roi(conn, rid.lower())
+            info = roi_info(conn, rid.lower())
+        except AreaError as e:
+            raise HTTPException(404, str(e)) from e
     return _schedule_if_needed(info, background)

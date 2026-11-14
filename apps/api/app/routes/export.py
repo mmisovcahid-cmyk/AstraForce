@@ -2,6 +2,7 @@
 
 import csv
 import io
+import threading
 from collections.abc import Iterator
 from datetime import date
 
@@ -24,6 +25,9 @@ from app.routes.analytics import (
 router = APIRouter(prefix="/export")
 
 MAX_HOTSPOT_ROWS = 2_000_000
+MAX_CONCURRENT_EXPORTS = 3  # worker başına; havuzda 10 bağlantı var
+EXPORT_WAIT_S = 120
+_export_slots = threading.BoundedSemaphore(MAX_CONCURRENT_EXPORTS)
 ATTRIBUTION = "Source: NASA FIRMS (MODIS C6.1, VIIRS 375 m); harmonization: AstraForce"
 
 
@@ -86,11 +90,27 @@ def hotspots(area: AreaQ, date_from: date, date_to: date):
         limit=sql.Literal(MAX_HOTSPOT_ROWS),
     )
 
-    def stream() -> Iterator[bytes]:
-        with get_pool().connection() as conn, conn.cursor() as cur, cur.copy(query) as copy:
-            yield from copy
+    if a.kind == "roi":
+        with get_pool().connection() as conn:
+            if not conn.execute("SELECT 1 FROM roi WHERE id = %s", (a.key,)).fetchone():
+                raise HTTPException(404, "Bölge bulunamadı")
 
-    return _csv_response(stream(), _filename(a.code, "hotspots", f"_{date_from}_{date_to}"))
+    def stream() -> Iterator[bytes]:
+        # Akış süresince bir havuz bağlantısı tutulur (havuz: 10). Eşzamanlı büyük indirmeler
+        # API'nin geri kalanını kilitlemesin: fazlası havuzun DIŞINDA sıra bekler. Yuva akış
+        # başlarken alınır; istemci akış başlamadan koparsa sızıntı olmaz.
+        if not _export_slots.acquire(timeout=EXPORT_WAIT_S):
+            raise RuntimeError("export kuyruğu dolu")
+        try:
+            with get_pool().connection() as conn, conn.cursor() as cur, cur.copy(query) as copy:
+                yield from copy
+        finally:
+            _export_slots.release()
+
+    res = _csv_response(stream(), _filename(a.code, "hotspots", f"_{date_from}_{date_to}"))
+    # İstemci satır sayısını bu sınırla karşılaştırıp kesilmeyi anlayabilir
+    res.headers["X-Row-Limit"] = str(MAX_HOTSPOT_ROWS)
+    return res
 
 
 @router.get("/daily.csv")

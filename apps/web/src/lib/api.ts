@@ -210,12 +210,15 @@ export function fetchStatus(area: string, metric: Metric, signal?: AbortSignal) 
 }
 
 export type RangeData = {
-  total: number;
-  median: number;
+  /** null: aralığın hiçbir gününün verisi henüz gelmedi */
+  total: number | null;
+  median: number | null;
   anomaly_pct: number | null;
   fire_days: number;
   date_from: string;
   date_to: string;
+  /** Verinin bulunduğu son gün (date_to'dan önceyse aralık oraya kadar hesaplandı) */
+  effective_date_to: string | null;
 };
 
 export function fetchRange(
@@ -279,6 +282,13 @@ export async function createRoi(body: {
 
 export function fetchRoi(id: string, signal?: AbortSignal) {
   return getJson<RoiInfo>(`/roi/${id}`, signal);
+}
+
+/** Hata vermiş bölgenin hesaplamasını yeniden başlatır (hata otomatik yeniden denenmez). */
+export async function retryRoi(id: string): Promise<RoiInfo> {
+  const res = await fetch(`${API_URL}/roi/${id}/retry`, { method: "POST" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
 
 /** İndirme bağlantıları (tarayıcı doğrudan indirir; CSV akış olarak gelir). */

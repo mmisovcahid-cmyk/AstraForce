@@ -1,3 +1,4 @@
+import time
 from datetime import date
 from typing import Annotated
 
@@ -12,9 +13,24 @@ MAX_RANGE_DAYS = 31
 MAX_LIMIT = 20000
 
 
+# /data/status 26 M satırı tarar (~6 sn); veri günde bir değiştiği için kısa süre önbelleklenir.
+STATUS_TTL_S = 600
+_status_cache: tuple[float, dict] | None = None
+
+
 @router.get("/data/status")
 def data_status() -> dict:
-    """Ülke / kaynak / ürün / yıl bazında yüklü kayıt sayıları."""
+    """Ülke / kaynak / ürün / yıl bazında yüklü kayıt sayıları (10 dk önbellekli)."""
+    global _status_cache
+    now = time.monotonic()
+    if _status_cache and now - _status_cache[0] < STATUS_TTL_S:
+        return _status_cache[1]
+    body = _load_status()
+    _status_cache = (now, body)
+    return body
+
+
+def _load_status() -> dict:
     with get_pool().connection() as conn:
         rows = conn.execute(
             """

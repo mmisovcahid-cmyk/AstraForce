@@ -9,6 +9,7 @@ import {
   fetchMatrix,
   fetchRange,
   fetchRoi,
+  retryRoi,
   fetchSeason,
   fetchStatus,
   type MatrixData,
@@ -45,6 +46,8 @@ const FIRST_YEAR = 2000;
 const CURRENT_YEAR = new Date().getUTCFullYear();
 const DEFAULT_YEAR = CURRENT_YEAR - 1; // son tamamlanmış yıl
 const MEAN_DISPLAY_YEAR = 2024;
+const ROI_POLL_MS = 1200;
+const ROI_POLL_MAX_FAILURES = 5; // ~1,2 + 2,4 + 4,8 + 9,6 sn geçici kesintiye dayanır
 type T = (k: MessageKey) => string;
 
 const unitOf = (m: Metric) => (m === "frp" ? " MW" : "");
@@ -70,6 +73,8 @@ export function CalendarView() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [range, setRange] = useState<RangeData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [roiFailed, setRoiFailed] = useState(false);
+  const [pollKey, setPollKey] = useState(0);
 
   // Adres çubuğundan ilk durum
   useEffect(() => {
@@ -115,12 +120,16 @@ export function CalendarView() {
       return;
     }
     setAreaReady(false);
+    setRoiFailed(false);
     let stop = false;
     const ctrl = new AbortController();
     const poll = async () => {
+      let failures = 0;
       while (!stop) {
         try {
           const info = await fetchRoi(id, ctrl.signal);
+          failures = 0;
+          setError(null);
           setRoi(info);
           if (info.status === "ready") {
             setAreaReady(true);
@@ -128,13 +137,20 @@ export function CalendarView() {
           }
           if (info.status === "error") {
             setError(`${t("roiError")}: ${info.error ?? ""}`);
+            setRoiFailed(true);
             return;
           }
         } catch (e) {
-          if (!stop) setError(e instanceof Error ? e.message : String(e));
-          return;
+          if (stop) return;
+          // Geçici ağ / API kesintisi: artan aralıklarla yeniden dene, sonra vazgeç
+          failures += 1;
+          if (failures >= ROI_POLL_MAX_FAILURES) {
+            setError(e instanceof Error ? e.message : String(e));
+            setRoiFailed(true);
+            return;
+          }
         }
-        await new Promise((r) => setTimeout(r, 1200));
+        await new Promise((r) => setTimeout(r, ROI_POLL_MS * 2 ** failures));
       }
     };
     void poll();
@@ -142,7 +158,19 @@ export function CalendarView() {
       stop = true;
       ctrl.abort();
     };
-  }, [ready, area, t]);
+  }, [ready, area, t, pollKey]);
+
+  const retry = async () => {
+    const id = roiId(area);
+    if (!id) return;
+    setError(null);
+    try {
+      await retryRoi(id);
+    } catch {
+      // Yine de yoklamayı yeniden başlat: API geri geldiyse durum oradan okunur
+    }
+    setPollKey((k) => k + 1);
+  };
 
   const load = <D,>(
     fn: (signal: AbortSignal) => Promise<D>,
@@ -235,7 +263,16 @@ export function CalendarView() {
             ⚠ {t("partialCoverage").replace("{p}", formatNumber(roi.covered_pct, locale))}
           </p>
         )}
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && (
+          <p className="text-sm text-red-400">
+            {error}
+            {roiFailed && (
+              <button type="button" onClick={retry} className="ml-3 rounded bg-white/10 px-2 py-0.5 text-gray-200 hover:bg-white/20 print:hidden">
+                {t("retry")}
+              </button>
+            )}
+          </p>
+        )}
 
         {!areaReady && roi && !error && (
           <div className="rounded-lg bg-gray-950/60 p-4" role="status">
@@ -378,7 +415,7 @@ function StatusCard({ status, metric, locale, t }: { status: StatusData; metric:
     <section aria-label={t("statusTitle")}>
       <h2 className="mb-2 text-sm font-medium text-gray-200">
         {t("statusTitle")} · {formatDate(status.as_of, locale)}
-        {status.latest_data_day && (
+        {status.latest_data_day && status.latest_data_day !== status.as_of && (
           <span className="ml-2 text-xs font-normal text-gray-500">({t("latestData")}: {formatDate(status.latest_data_day, locale)})</span>
         )}
       </h2>
@@ -413,13 +450,18 @@ function RangePanel({
       </div>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
         <span className="text-sm font-medium text-gray-200">{t("rangeTitle")}</span>
-        {range ? (
+        {range && range.total === null ? (
+          <span className="text-gray-500">{t("noDataYet")}</span>
+        ) : range && range.median !== null ? (
           <>
-            <span>{t("rangeTotal")}: <b className="tabular-nums">{formatNumber(range.total, locale, 1)}{unitOf(metric)}</b></span>
+            <span>{t("rangeTotal")}: <b className="tabular-nums">{formatNumber(range.total ?? 0, locale, 1)}{unitOf(metric)}</b></span>
             <span>{t("medianShort")}: <span className="tabular-nums">{formatNumber(range.median, locale, 1)}</span>
               {range.anomaly_pct !== null && <span className="ml-1" style={{ color: range.anomaly_pct > 0 ? ANOMALY_COLORS.above : ANOMALY_COLORS.below }}>({signed(range.anomaly_pct, locale)})</span>}
             </span>
             <span>{t("fireDays")}: <b>{range.fire_days}</b></span>
+            {range.effective_date_to && range.effective_date_to < range.date_to && (
+              <span className="text-gray-500">{t("dataUntil")} {formatDate(range.effective_date_to, locale)}</span>
+            )}
           </>
         ) : (
           <span className="text-gray-500">{t("loading")}</span>

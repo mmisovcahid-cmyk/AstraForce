@@ -108,6 +108,50 @@ def test_anomaly_class_when_median_is_zero():
     assert anomaly_class(anomaly_pct(80, 100), 80, 100) == "below"
 
 
+def _stub_series(monkeypatch, as_of: date):
+    """Her gün 10 sıcak noktalı sentetik seri; veri as_of'ta bitiyor (FIRMS gecikmesi)."""
+    from app.routes import analytics as routes
+
+    idx = pd.date_range("2000-11-01", as_of, freq="D")
+    df = pd.DataFrame(
+        {"hotspots": 10.0, "events": 1.0, "frp": 5.0, "provisional": False}, index=idx
+    )
+    monkeypatch.setattr(routes, "load_series", lambda area: (df, as_of))
+
+
+@pytest.fixture
+def stub_client():
+    from app import main
+
+    with TestClient(main.app) as c:
+        yield c
+
+
+def test_status_is_measured_at_last_data_day_not_today(monkeypatch, stub_client):
+    # Veri 12 Kasım'da bitiyor: son 7 gün ve ay başından beri, eksik günler sayılmadan normal çıkmalı
+    _stub_series(monkeypatch, date(2026, 11, 12))
+    body = stub_client.get("/analytics/status", params={"area": "TR"}).json()
+    assert body["as_of"] == body["latest_data_day"] == "2026-11-12"
+    assert body["month_to_date"] == body["month_to_date_median"] == 120.0
+    assert body["month_anomaly_pct"] == 0.0 and body["last7_anomaly_pct"] == 0.0
+
+
+def test_range_ignores_days_without_data_yet(monkeypatch, stub_client):
+    _stub_series(monkeypatch, date(2026, 11, 12))
+    body = stub_client.get(
+        "/analytics/range",
+        params={"area": "TR", "date_from": "2026-11-08", "date_to": "2026-11-14"},
+    ).json()
+    assert body["effective_date_to"] == "2026-11-12"
+    assert body["total"] == body["median"] == 50.0 and body["anomaly_pct"] == 0.0
+
+    future = stub_client.get(
+        "/analytics/range",
+        params={"area": "TR", "date_from": "2026-11-13", "date_to": "2026-11-14"},
+    ).json()
+    assert future["effective_date_to"] is None and future["total"] is None
+
+
 @pytest.fixture
 def client():
     from app import main

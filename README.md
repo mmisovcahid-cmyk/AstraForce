@@ -56,7 +56,7 @@ pnpm harmonize run --country AZ,TR,US,AR    # ~10 min
 pnpm dev                                    # http://localhost:3000 (API on :8000/docs)
 ```
 
-Run `pnpm test` (pytest and vitest) and `pnpm lint`. `pnpm update:daily` refreshes the near-real-time data and re-harmonizes; it is the same job the server runs every day. `pnpm db:optimize` physically orders hotspots by location, which makes large drawn areas much faster.
+Run `pnpm test` (pytest and vitest) and `pnpm lint`. `pnpm update:daily` refreshes the near-real-time data and re-harmonizes; it is the same job the server runs every day. `pnpm db:optimize` physically orders hotspots by location, which makes large drawn areas much faster; it needs free disk space about the size of the `fire_detection` table (~10 GB), so it is not part of `--bootstrap` (add `--optimize` if the disk allows).
 
 ## Deploy on Render
 

@@ -22,6 +22,8 @@ services:
     disk:
       name: pgdata
       mountPath: /var/lib/postgresql/data
+      # Veritabanı ~14 GB (fire_detection ~10 GB). `pnpm db:optimize` / `update --optimize`
+      # (CLUSTER) tablo boyutu kadar EK yer ister: burada çalıştırmak için diski ≥ 40 GB yapın.
       sizeGB: 20
     envVars:
       - key: POSTGRES_USER

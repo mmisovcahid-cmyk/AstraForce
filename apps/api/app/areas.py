@@ -11,7 +11,6 @@ Her alan için aynı biçimde bir günlük harmonize seri üretilir:
 import hashlib
 import json
 import logging
-import threading
 from dataclasses import dataclass
 from datetime import date
 
@@ -86,6 +85,30 @@ def daily_series(conn: psycopg.Connection, area: Area) -> pd.DataFrame:
     df = pd.DataFrame(rows, columns=["day", "hotspots", "events", "frp", "provisional"])
     df.index = pd.to_datetime(df.pop("day"))
     return df.sort_index()
+
+
+def data_until(conn: psycopg.Connection, area: Area) -> date | None:
+    """Alanın verisinin kesin olarak bulunduğu son gün (harmonize katsayısı olan son gün).
+
+    FIRMS verisi 1–2 gün gecikmeli gelir; bu günden sonrası "yangın yok" değil "veri yok"tur.
+    ROI birden çok ülkeye düşüyorsa en geride kalan ülkenin son günü alınır.
+    """
+    if area.kind == "country":
+        row = conn.execute(
+            "SELECT max(day) FROM harmonized_factor WHERE country = %s", (area.key,)
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """
+            SELECT min(last_day) FROM (
+                SELECT max(hf.day) AS last_day FROM harmonized_factor hf
+                WHERE hf.country = ANY((SELECT countries FROM roi WHERE id = %s)::char(2)[])
+                GROUP BY hf.country
+            ) t
+            """,
+            (area.key,),
+        ).fetchone()
+    return row[0] if row else None
 
 
 def raw_counts(conn: psycopg.Connection, area: Area, first: date, last: date) -> dict:
@@ -210,9 +233,10 @@ def roi_status(conn: psycopg.Connection, rid: str) -> tuple[str, float]:
 
 def roi_info(conn: psycopg.Connection, rid: str) -> dict:
     row = conn.execute(
-        """
+        f"""
         SELECT id, name, area_km2, countries, covered_pct, status, progress, error,
-               model_version, computed_at, ST_AsGeoJSON(geom, 5)::json,
+               model_version, computed_at, status = 'running' AND {_STALE_SQL} AS stale,
+               ST_AsGeoJSON(geom, 5)::json,
                ST_Y(ST_Centroid(geom)), ST_X(ST_Centroid(geom)),
                ARRAY[ST_XMin(geom), ST_YMin(geom), ST_XMax(geom), ST_YMax(geom)]
         FROM roi WHERE id = %s
@@ -232,6 +256,7 @@ def roi_info(conn: psycopg.Connection, rid: str) -> dict:
         "error",
         "model_version",
         "computed_at",
+        "stale",
         "geometry",
         "center_lat",
         "center_lon",
@@ -244,36 +269,82 @@ def roi_info(conn: psycopg.Connection, rid: str) -> dict:
     return info
 
 
-_running: set[str] = set()
-_running_lock = threading.Lock()
+# Hesaplayan worker her yılda heartbeat_at'i yeniler. Bundan eski heartbeat'li "running" bölge
+# sahipsiz sayılır (worker çöktü / yeniden başladı) ve yeniden sahiplenilebilir.
+ROI_STALE_AFTER = "10 minutes"
+# Aynı anda en fazla bu kadar bölge hesaplanır (her biri 26 yıl tarar). Fazlası 'pending'
+# bekler ve istemcinin bir sonraki yoklamasında sıraya girer: herkese açık POST /roi ile
+# veritabanı boğulamaz. (İstekler web vekilinden geldiği için IP başına sınır işe yaramaz.)
+MAX_CONCURRENT_ROI = 2
+# "running" ama sahipsiz mi? (roi_info.stale ve sahiplenme koşulu aynı tanımı kullanır)
+_STALE_SQL = f"(heartbeat_at IS NULL OR heartbeat_at < now() - interval '{ROI_STALE_AFTER}')"
+
+
+class _Superseded(Exception):
+    """Hesaplama sürerken harmonizasyon bölgeyi yeniden 'pending' yaptı: sonuç eskidi."""
+
+
+def claim_roi(conn: psycopg.Connection, rid: str) -> bool:
+    """Bölgeyi bu worker için atomik olarak sahiplenir; başka worker hesaplıyorsa False.
+
+    Yalnızca 'pending' ya da sahipsiz kalmış 'running' bölgeler sahiplenilir. 'error' otomatik
+    yeniden denenmez (her yoklamada aynı ağır sorgu tekrar çalışmasın): bkz. retry_roi.
+    """
+    row = conn.execute(
+        f"""
+        UPDATE roi SET status = 'running', progress = 0, error = NULL, heartbeat_at = now()
+        WHERE id = %s AND (status = 'pending' OR (status = 'running' AND {_STALE_SQL}))
+          AND (SELECT count(*) FROM roi r2
+               WHERE r2.status = 'running' AND r2.id <> %s
+                 AND NOT (r2.heartbeat_at IS NULL
+                          OR r2.heartbeat_at < now() - interval '{ROI_STALE_AFTER}')) < %s
+        RETURNING id
+        """,
+        (rid, rid, MAX_CONCURRENT_ROI),
+    ).fetchone()
+    return row is not None
+
+
+def retry_roi(conn: psycopg.Connection, rid: str) -> bool:
+    """Hata vermiş bölgeyi yeniden kuyruğa alır ('error' → 'pending')."""
+    row = conn.execute(
+        "UPDATE roi SET status = 'pending', progress = 0, error = NULL"
+        " WHERE id = %s AND status = 'error' RETURNING id",
+        (rid,),
+    ).fetchone()
+    return row is not None
 
 
 def compute_roi(pool, rid: str) -> None:
     """ROI günlük serisini yıl yıl hesaplar (ilerleme roi.progress'te). Arka planda çalışır."""
-    with _running_lock:
-        if rid in _running:
-            return
-        _running.add(rid)
     try:
         with pool.connection() as conn:
             conn.autocommit = True
+            if not claim_roi(conn, rid):
+                return  # başka bir istek / worker hesaplıyor ya da hesaplanacak bir şey yok
             _compute(conn, rid)
+    except _Superseded:
+        log.info("ROI %s: harmonizasyon değişti, sonuç atıldı (yeniden hesaplanacak)", rid)
     except Exception as e:  # noqa: BLE001 - hata kullanıcıya roi.error ile gösterilir
         log.exception("ROI %s hesaplanamadı", rid)
         with pool.connection() as conn:
             conn.execute(
-                "UPDATE roi SET status = 'error', error = %s WHERE id = %s", (str(e)[:500], rid)
+                "UPDATE roi SET status = 'error', error = %s WHERE id = %s AND status = 'running'",
+                (str(e)[:500], rid),
             )
             conn.commit()
-    finally:
-        with _running_lock:
-            _running.discard(rid)
+
+
+def _heartbeat(conn: psycopg.Connection, rid: str, progress: float) -> None:
+    cur = conn.execute(
+        "UPDATE roi SET progress = %s, heartbeat_at = now() WHERE id = %s AND status = 'running'",
+        (progress, rid),
+    )
+    if cur.rowcount == 0:
+        raise _Superseded(rid)
 
 
 def _compute(conn: psycopg.Connection, rid: str) -> None:
-    conn.execute(
-        "UPDATE roi SET status = 'running', progress = 0, error = NULL WHERE id = %s", (rid,)
-    )
     today = date.today()
     years = list(range(FIRST_DAY.year, today.year + 1))
     factors = pd.DataFrame(
@@ -315,12 +386,23 @@ def _compute(conn: psycopg.Connection, rid: str) -> None:
             parts.append(
                 pd.DataFrame(rows, columns=["day", "country", "source", "det", "evt", "frp"])
             )
-        conn.execute(
-            "UPDATE roi SET progress = %s WHERE id = %s",
-            (round((i + 1) / len(years) * 100, 1), rid),
-        )
+        _heartbeat(conn, rid, round((i + 1) / len(years) * 100, 1))
 
     daily = harmonize_roi(pd.concat(parts) if parts else None, factors)
+    # Seri ve 'ready' birlikte yazılır; arada harmonizasyon bölgeyi 'pending' yaptıysa
+    # (eski katsayılarla hesaplandı) hiçbiri kalıcı olmaz.
+    with conn.transaction():
+        _write_daily(conn, rid, daily)
+        cur = conn.execute(
+            "UPDATE roi SET status = 'ready', progress = 100, computed_at = now(),"
+            " model_version = %s, heartbeat_at = now() WHERE id = %s AND status = 'running'",
+            (version, rid),
+        )
+        if cur.rowcount == 0:
+            raise _Superseded(rid)
+
+
+def _write_daily(conn: psycopg.Connection, rid: str, daily: pd.DataFrame) -> None:
     conn.execute("DELETE FROM roi_daily WHERE roi_id = %s", (rid,))
     if not daily.empty:
         block = daily.assign(roi_id=rid)[
@@ -345,11 +427,6 @@ def _compute(conn: psycopg.Connection, rid: str) -> None:
             ) as copy,
         ):
             copy.write(block)
-    conn.execute(
-        "UPDATE roi SET status = 'ready', progress = 100, computed_at = now(), model_version = %s"
-        " WHERE id = %s",
-        (version, rid),
-    )
 
 
 def harmonize_roi(raw: pd.DataFrame | None, factors: pd.DataFrame) -> pd.DataFrame:

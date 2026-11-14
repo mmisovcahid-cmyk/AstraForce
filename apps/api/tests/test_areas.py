@@ -6,7 +6,17 @@ import pandas as pd
 import psycopg
 import pytest
 
-from app.areas import AreaError, create_roi, harmonize_roi, parse_area
+from app.areas import (
+    AreaError,
+    _heartbeat,
+    _Superseded,
+    claim_roi,
+    create_roi,
+    harmonize_roi,
+    parse_area,
+    retry_roi,
+    roi_info,
+)
 from app.config import get_settings
 
 
@@ -84,3 +94,52 @@ def test_create_roi_rejects_bad_input(conn):
     poly = {"type": "Polygon", "coordinates": [[[30, 38], [33, 38], [33, 40], [30, 40], [30, 38]]]}
     roi = create_roi(conn, geojson={"type": "Feature", "geometry": poly})
     assert roi["countries"] == ["TR"] and roi["covered_pct"] == 100.0
+
+
+def _fresh_roi(conn, lon: float = 35.0) -> str:
+    rid = create_roi(conn, circle=(39.0, lon, 12.3))["id"]  # İç Anadolu
+    conn.execute("UPDATE roi SET status = 'pending', heartbeat_at = NULL WHERE id = %s", (rid,))
+    return rid
+
+
+@pytest.mark.db
+def test_roi_claim_is_exclusive_until_heartbeat_goes_stale(conn):
+    rid = _fresh_roi(conn)
+    assert claim_roi(conn, rid) is True
+    assert claim_roi(conn, rid) is False  # ikinci worker / yoklama aynı işi almaz
+    assert roi_info(conn, rid)["stale"] is False
+    # Hesaplayan worker düştü: heartbeat eskidi → devralınabilir
+    conn.execute("UPDATE roi SET heartbeat_at = now() - interval '1 hour' WHERE id = %s", (rid,))
+    assert roi_info(conn, rid)["stale"] is True
+    assert claim_roi(conn, rid) is True
+
+
+@pytest.mark.db
+def test_roi_computations_are_capped(conn):
+    conn.execute("UPDATE roi SET status = 'ready' WHERE status = 'running'")  # temiz başlangıç
+    ids = [_fresh_roi(conn, lon) for lon in (34.0, 35.0, 36.0)]
+    assert [claim_roi(conn, r) for r in ids] == [True, True, False]  # MAX_CONCURRENT_ROI = 2
+    assert roi_info(conn, ids[2])["status"] == "pending"  # sırada bekler
+    conn.execute("UPDATE roi SET status = 'ready' WHERE id = %s", (ids[0],))
+    assert claim_roi(conn, ids[2]) is True
+
+
+@pytest.mark.db
+def test_roi_error_is_not_retried_automatically(conn):
+    rid = _fresh_roi(conn)
+    conn.execute("UPDATE roi SET status = 'error', error = 'x' WHERE id = %s", (rid,))
+    assert claim_roi(conn, rid) is False
+    assert retry_roi(conn, rid) is True and roi_info(conn, rid)["status"] == "pending"
+    assert claim_roi(conn, rid) is True
+
+
+@pytest.mark.db
+def test_roi_computation_is_dropped_when_harmonization_resets_it(conn):
+    rid = _fresh_roi(conn)
+    assert claim_roi(conn, rid)
+    _heartbeat(conn, rid, 10.0)
+    # harmonize run (apply.py) bölgeyi yeniden kuyruğa aldı
+    conn.execute("UPDATE roi SET status = 'pending' WHERE id = %s", (rid,))
+    with pytest.raises(_Superseded):
+        _heartbeat(conn, rid, 20.0)
+    assert roi_info(conn, rid)["status"] == "pending"
