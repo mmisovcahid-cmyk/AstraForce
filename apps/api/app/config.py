@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     postgres_db: str = "astraforce"
     cors_origins: str = "http://localhost:3000"
     firms_map_key: str = ""
+    earthdata_user: str = ""
+    earthdata_pass: str = ""
 
     @model_validator(mode="after")
     def _build_database_url(self) -> "Settings":

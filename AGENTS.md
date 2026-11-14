@@ -33,7 +33,7 @@ On Windows PowerShell, `--country AZ,TR,US` arrives as `"AZ TR US"`. List argume
 | Daily refresh | `pnpm --filter api run update` | **Must use `run`**. Without `run`, pnpm's built-in `update` silently bumps dependencies instead. |
 | DB shell | `pnpm db:psql` | |
 | Dump / restore | `pnpm db:dump` / `scripts/restore-db.sh` | |
-| Burned area ingest | `pnpm --filter api ingest burned_area --country XX --year YYYY --month N` | MODIS MCD64A1 / VIIRS VNP64A1 (placeholder, Earthdata auth gerekli) |
+| Burned area ingest | `pnpm --filter api ingest burned_area --country XX --year YYYY --month N` | MODIS MCD64A1 / VIIRS VNP64A1 via NASA Earthdata (requires `EARTHDATA_USER` / `EARTHDATA_PASS` in `.env`) |
 
 ## Framework/toolchain quirks
 - **MapLibre v6**: no default export (`import * as maplibregl`), and its Web Worker can't be bundled by Turbopack. `apps/web/scripts/copy-maplibre-worker.mjs` runs in `predev`/`prebuild` and copies the worker to `public/maplibre/`; `FireMap.tsx` calls `setWorkerUrl`. MapLibre is client-only via `next/dynamic(ssr: false)`.
