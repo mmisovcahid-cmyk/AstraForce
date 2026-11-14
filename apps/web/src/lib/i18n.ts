@@ -154,6 +154,8 @@ const az = {
   showStaticSources: "Statik kaynakları göster",
   burnedAreas: "Yanık alan",
   showBurnedAreas: "Yanık alan katmanını göster",
+  emergencyAlerts: "Acil durum uyarıları",
+  showEmergencyAlerts: "Acil durum uyarılarını göster",
   dataUpdated: "Məlumat yenilənib",
 } as const;
 
@@ -312,6 +314,8 @@ const en: Record<MessageKey, string> = {
   showStaticSources: "Show static heat sources",
   burnedAreas: "Burned area",
   showBurnedAreas: "Show burned area layer",
+  emergencyAlerts: "Emergency alerts",
+  showEmergencyAlerts: "Show emergency alerts",
   dataUpdated: "Data updated",
 };
 

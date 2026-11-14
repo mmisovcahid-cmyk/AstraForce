@@ -42,6 +42,8 @@ export function FireMap({
   showStaticSources = false,
   burnedAreas = null,
   showBurnedAreas = false,
+  emergencyAlerts = null,
+  showEmergencyAlerts = false,
 }: {
   bbox: Bbox;
   detections: Detections | null;
@@ -61,6 +63,10 @@ export function FireMap({
   burnedAreas?: GeoJSON.FeatureCollection | null;
   /** Yanık alan katmanının haritada gösterilip gösterilmeyeceği. */
   showBurnedAreas?: boolean;
+  /** Acil durum uyarıları GeoJSON katmanı (EONET, GDACS, ReliefWeb). */
+  emergencyAlerts?: GeoJSON.FeatureCollection | null;
+  /** Acil durum uyarı katmanının haritada gösterilip gösterilmeyeceği. */
+  showEmergencyAlerts?: boolean;
 }) {
   const latestLandCover = useRef<number | null>(landCoverYear);
   const drawRef = useRef<TerraDraw | null>(null);
@@ -168,6 +174,19 @@ export function FireMap({
         },
       });
       m.setLayoutProperty("burned-areas", "visibility", "none");
+      // Acil durum uyarıları katmanı (EONET, GDACS, ReliefWeb) — varsayılan gizli
+      m.addSource("emergency-alerts", { type: "geojson", data: EMPTY });
+      m.addLayer({
+        id: "emergency-alerts",
+        type: "fill",
+        source: "emergency-alerts",
+        paint: {
+          "fill-color": "#ef4444",
+          "fill-opacity": 0.5,
+          "fill-outline-color": "#b91c1c",
+        },
+      });
+      m.setLayoutProperty("emergency-alerts", "visibility", "none");
 
       const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
       m.on("mouseenter", "detections", (e) => {
@@ -239,6 +258,12 @@ export function FireMap({
     if (src) src.setData(burnedAreas ?? EMPTY);
   }, [burnedAreas]);
 
+  // Acil durum uyarıları katmanı: veri geldiğinde source'u güncelle
+  useEffect(() => {
+    const src = map.current?.getSource("emergency-alerts") as maplibregl.GeoJSONSource | undefined;
+    if (src) src.setData(emergencyAlerts ?? EMPTY);
+  }, [emergencyAlerts]);
+
   // Statik kaynak katmanı görünürlüğü toggle
   useEffect(() => {
     const m = map.current;
@@ -254,6 +279,18 @@ export function FireMap({
       m.setLayoutProperty("burned-areas", "visibility", showBurnedAreas ? "visible" : "none");
     }
   }, [showBurnedAreas]);
+
+  // Acil durum uyarıları katmanı görünürlüğü toggle
+  useEffect(() => {
+    const m = map.current;
+    if (m?.isStyleLoaded() && m.getLayer("emergency-alerts")) {
+      m.setLayoutProperty(
+        "emergency-alerts",
+        "visibility",
+        showEmergencyAlerts ? "visible" : "none",
+      );
+    }
+  }, [showEmergencyAlerts]);
 
   useEffect(() => {
     latestRoi.current = roiGeometry

@@ -384,3 +384,59 @@ export async function fetchHealth(signal?: AbortSignal): Promise<Health> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+export type EmergencyAlertProps = {
+  alert_id: string;
+  alert_name: string;
+  alert_description: string | null;
+  alert_url: string | null;
+  alert_date: string | null;
+  source: string;
+  created_at: string;
+};
+
+export type EmergencyAlerts = FeatureCollection<any, EmergencyAlertProps>;
+
+export type EmergencySensorSummary = {
+  source: string;
+  alerts: number;
+  first_alert: string | null;
+  last_alert: string | null;
+};
+
+export type EmergencySummary = {
+  area: string;
+  date_from: string;
+  date_to: string;
+  sources: EmergencySensorSummary[];
+};
+
+export function fetchEmergencyAlerts(
+  params: {
+    area: string;
+    dateFrom: string;
+    dateTo: string;
+    source?: string;
+  },
+  signal?: AbortSignal,
+) {
+  const q = new URLSearchParams({
+    area: params.area,
+    date_from: params.dateFrom,
+    date_to: params.dateTo,
+  });
+  if (params.source) q.set("source", params.source);
+  return getJson<EmergencyAlerts>(`/emergency/alerts?${q}`, signal);
+}
+
+export function fetchEmergencySummary(
+  params: { area: string; dateFrom: string; dateTo: string },
+  signal?: AbortSignal,
+) {
+  const q = new URLSearchParams({
+    area: params.area,
+    date_from: params.dateFrom,
+    date_to: params.dateTo,
+  });
+  return getJson<EmergencySummary>(`/emergency/summary?${q}`, signal);
+}

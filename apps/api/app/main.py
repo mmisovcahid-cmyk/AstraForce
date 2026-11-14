@@ -6,7 +6,16 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db import close_pool, get_pool, open_pool
-from app.routes import analytics, burned_area, data, export, harmonized, roi, static_sources
+from app.routes import (
+    analytics,
+    burned_area,
+    data,
+    emergency,
+    export,
+    harmonized,
+    roi,
+    static_sources,
+)
 
 
 @asynccontextmanager
@@ -32,6 +41,7 @@ app.include_router(roi.router)
 app.include_router(export.router)
 app.include_router(static_sources.router)
 app.include_router(burned_area.router)
+app.include_router(emergency.router)
 
 
 def check_database() -> dict:

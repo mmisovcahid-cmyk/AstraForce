@@ -9,7 +9,7 @@
 
 import argparse
 import sys
-from datetime import date
+from datetime import date, timedelta
 
 import psycopg
 
@@ -17,8 +17,11 @@ from app.config import get_settings
 from app.ingest.archive import ingest_archive
 from app.ingest.boundaries import has_boundaries, ingest_boundaries
 from app.ingest.burned_area import ingest_burned_area
+from app.ingest.eonet import ingest_eonet
 from app.ingest.firms_api import FirmsApiError, ingest_api
+from app.ingest.gdacs import ingest_gdacs
 from app.ingest.http import make_client
+from app.ingest.reliefweb import ingest_reliefweb
 from app.ingest.sources import SOURCES, parse_countries, parse_sources, parse_years
 
 DEFAULT_SOURCES = ",".join(SOURCES)
@@ -61,6 +64,27 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["MODIS_MCD64A1", "VIIRS_VNP64A1"],
         help="Sensör ürünü (varsayılan: MODIS_MCD64A1)",
     )
+
+    eo = sub.add_parser("eonet", help="NASA EONET yangın olayları")
+    eo.add_argument("--days", type=int, default=30, help="Geri dönük arama aralığı (gün)")
+    eo.add_argument(
+        "--category",
+        default="Wildfires",
+        help="EONET kategori filtresi (varsayılan: Wildfires)",
+    )
+
+    gd = sub.add_parser("gdacs", help="GDACS afet uyarıları")
+    gd.add_argument("--days", type=int, default=30, help="Geri dönük arama aralığı (gün)")
+    gd.add_argument(
+        "--event-type",
+        default="VF",
+        help="GDACS event türü (varsayılan: VF = Vegetation Fire)",
+    )
+
+    rw = sub.add_parser("reliefweb", help="ReliefWeb afet raporları")
+    rw.add_argument("--days", type=int, default=30, help="Geri dönük arama aralığı (gün)")
+    rw.add_argument("--query", default="fire", help="ReliefWeb arama terimi (varsayılan: fire)")
+
     return p
 
 
@@ -125,6 +149,24 @@ def main(argv: list[str] | None = None) -> int:
                 args.force,
             )
             print(f"{n} yanık alan kaydı yüklendi ({args.sensor}, {args.year}-{args.month:02d})")
+            return 0
+
+        if args.cmd == "eonet":
+            start_date = date.today() - timedelta(days=args.days)
+            n = ingest_eonet(conn, start_date, date.today(), args.category)
+            print(f"{n} EONET olayı yüklendi ({args.category})")
+            return 0
+
+        if args.cmd == "gdacs":
+            start_date = date.today() - timedelta(days=args.days)
+            n = ingest_gdacs(conn, start_date, date.today(), args.event_type)
+            print(f"{n} GDACS uyarısı yüklendi ({args.event_type})")
+            return 0
+
+        if args.cmd == "reliefweb":
+            start_date = date.today() - timedelta(days=args.days)
+            n = ingest_reliefweb(conn, start_date, date.today(), args.query)
+            print(f"{n} ReliefWeb raporu yüklendi ({args.query})")
             return 0
 
         try:

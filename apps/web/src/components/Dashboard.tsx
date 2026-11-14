@@ -9,6 +9,8 @@ import {
   fetchBurnedArea,
   fetchBurnedAreaSummary,
   fetchCells,
+  fetchEmergencyAlerts,
+  fetchEmergencySummary,
   fetchRoi,
   fetchStaticSources,
   type RoiInfo,
@@ -58,6 +60,8 @@ export function Dashboard() {
   const [burnedAreas, setBurnedAreas] = useState<GeoJSON.FeatureCollection | null>(null);
   const [showBurnedAreas, setShowBurnedAreas] = useState(false);
   const [burnedAreaSummary, setBurnedAreaSummary] = useState<{ total_ha: number; cells: number } | null>(null);
+  const [emergencyAlerts, setEmergencyAlerts] = useState<GeoJSON.FeatureCollection | null>(null);
+  const [showEmergencyAlerts, setShowEmergencyAlerts] = useState(false);
   // Telefonda panel haritayı kaplamasın: varsayılan kapalı (çizim modunda açık)
   const [panelOpen, setPanelOpen] = useState(true);
   useEffect(() => {
@@ -169,6 +173,17 @@ export function Dashboard() {
   }, [apiUp, ready, regionId, roi, endDate, rangeDays]);
 
   useEffect(() => {
+    if (!apiUp || !ready) return;
+    const ctrl = new AbortController();
+    const { dateFrom, dateTo } = rangeEndingOn(endDate, rangeDays);
+    fetchEmergencyAlerts(
+      { area: roi?.area ?? regionId, dateFrom, dateTo },
+      ctrl.signal,
+    ).then((data) => setEmergencyAlerts(data)).catch(() => !ctrl.signal.aborted && setEmergencyAlerts(null));
+    return () => ctrl.abort();
+  }, [apiUp, ready, regionId, roi, endDate, rangeDays]);
+
+  useEffect(() => {
     const ctrl = new AbortController();
     const check = () =>
       fetchHealth(ctrl.signal)
@@ -222,6 +237,8 @@ export function Dashboard() {
           showStaticSources={showStaticSources}
           burnedAreas={burnedAreas}
           showBurnedAreas={showBurnedAreas}
+          emergencyAlerts={emergencyAlerts}
+          showEmergencyAlerts={showEmergencyAlerts}
           detections={layer === "points" && det.kind === "ready" ? det.data : null}
           cells={layer === "density" ? cells : null}
         />
@@ -295,6 +312,19 @@ export function Dashboard() {
           {showBurnedAreas && burnedAreaSummary && (
             <p className="text-gray-400 text-[11px] mt-1">
               {t("burnedAreas")} · {burnedAreaSummary.cells} hücre · {burnedAreaSummary.total_ha.toLocaleString(undefined, { maximumFractionDigits: 1 })} ha
+            </p>
+          )}
+          <label className="flex items-center gap-2 mt-2">
+            <input
+              type="checkbox"
+              checked={showEmergencyAlerts}
+              onChange={(e) => setShowEmergencyAlerts(e.target.checked)}
+            />
+            <span className="flex-1">{t("showEmergencyAlerts")}</span>
+          </label>
+          {showEmergencyAlerts && (
+            <p className="text-gray-400 text-[11px] mt-1">
+              {t("emergencyAlerts")} · {emergencyAlerts?.features.length ?? 0} uyarı
             </p>
           )}
           <button

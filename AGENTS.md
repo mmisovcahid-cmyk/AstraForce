@@ -27,6 +27,10 @@ On Windows PowerShell, `--country AZ,TR,US` arrives as `"AZ TR US"`. List argume
 | All tests | `pnpm test` | vitest (web) + pytest (api) |
 | All lint | `pnpm lint` | `tsc --noEmit` (web) + `ruff check` (api) |
 | E2E responsive tests | `pnpm test:e2e` | Playwright (mobile + desktop viewports) |
+| Emergency ingest | `pnpm --filter api ingest eonet --days 30 --category Wildfires` | NASA EONET events |
+| Emergency ingest | `pnpm --filter api ingest gdacs --days 30 --event-type VF` | GDACS disaster alerts |
+| Emergency ingest | `pnpm --filter api ingest reliefweb --days 30 --query fire` | ReliefWeb disaster reports |
+| Emergency API | `GET /emergency/alerts` and `GET /emergency/summary` | GeoJSON + summary of emergency alerts |
 | Build web | `pnpm build` / `pnpm --filter web build` | |
 | Single API test | `cd apps/api && uv run pytest tests/test_parse.py::test_acq_time_padding` | `db`-marked tests hit real DB in rolled-back txn, skip if DB down |
 | Single web test | `pnpm --filter web exec vitest run -t "bboxes"` | |
